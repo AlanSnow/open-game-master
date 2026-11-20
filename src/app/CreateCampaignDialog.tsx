@@ -25,8 +25,16 @@ import { withCapabilities, type ServerCapabilities } from "@/app/create-campaign
 import { narratorVoiceFor } from "@/lib/tts-voices";
 import { campaignPayload } from "@/app/create-campaign/payload";
 import { useT, useTp } from "@/lib/locale";
+import type { Locale } from "@/lib/messages-logic";
 
 const STEP_KEYS: readonly StepKey[] = ["essentials", "experience", "review"];
+
+// The host's chosen story language wins; an English-default host can also
+// serve a Chinese reader starting an adventure in their own language.
+function defaultTableLanguage(locale: Locale, language?: ServerCapabilities["language"]): CampaignDraft["tableLanguage"] {
+  if (locale === "zh-CN" && (!language || language === "english")) return "chinese";
+  return language ?? DEFAULT_DRAFT.tableLanguage;
+}
 
 // The new-campaign wizard: three screens over one draft (src/app/create-
 // campaign/draft.ts). The essentials, then how the table feels, then the
@@ -66,7 +74,9 @@ export function CreateCampaignDialog({
   useEffect(() => {
     localeRef.current = locale;
   }, [locale]);
-  const [draft, setDraft] = useState<CampaignDraft>(() => presetTheme(DEFAULT_DRAFT, locale));
+  const [draft, setDraft] = useState<CampaignDraft>(() =>
+    presetTheme({ ...DEFAULT_DRAFT, tableLanguage: defaultTableLanguage(locale) }, locale),
+  );
   // Every write goes through here, from handlers and callbacks only, so the
   // ref is always the draft as last written: a save pressed right after
   // typing reads the line just typed.
@@ -160,7 +170,7 @@ export function CreateCampaignDialog({
     const applied = applyDefaults(latest.current, settings, selectedPack, localeRef.current);
     const limits = capabilitiesNow.current;
     // The app's own setup plays in the server's language, as a fresh draft does.
-    const language = source === "mine" ? undefined : limits?.language;
+    const language = source === "mine" ? undefined : defaultTableLanguage(localeRef.current, limits?.language);
     const base = language
       ? { ...applied.draft, tableLanguage: language, ttsVoice: narratorVoiceFor(language, applied.draft.ttsVoice, limits?.tts?.provider === "openai") }
       : applied.draft;
@@ -214,9 +224,9 @@ export function CreateCampaignDialog({
         setCapabilities(data);
         // A new table plays in the server's language, unless the person
         // already chose one or their saved setup names one.
-        const language = data.language;
+        const language = defaultTableLanguage(localeRef.current, data.language);
         const start =
-          language && !edited.current && !fromSaved.current && latest.current.tableLanguage === DEFAULT_DRAFT.tableLanguage
+          !edited.current && !fromSaved.current
             ? { ...latest.current, tableLanguage: language, ttsVoice: narratorVoiceFor(language, latest.current.ttsVoice, data.tts?.provider === "openai") }
             : latest.current;
         // Defaults follow reality: a table should not discover on turn one

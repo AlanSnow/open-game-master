@@ -1,13 +1,10 @@
-// Reading text in the table's language: Snowball's stemmer and stop list for
-// it, English included, so every lexical reader (retrieval, waypoints, goal
-// collisions, safety lines, the rulebook) compares words the same way at
-// every table. No hand-written vocabulary: the stemmers are Snowball's own
-// algorithms (multilingual-stemmer), the stop lists Snowball's own files
-// (./stop-words). Pure apart from that package, so scripts load it directly.
+// Reading text in the table's language, with Snowball for its languages
+// and ICU word segmentation for Chinese. Every lexical reader (retrieval,
+// waypoints, safety lines, the rulebook) uses the same terms.
 
 import * as snowball from "multilingual-stemmer";
 import type { TableLanguage } from "../schemas/game-settings-options.ts";
-import { words } from "./text-logic.ts";
+import { chineseWords, words } from "./text-logic.ts";
 import { STOP_LIST as danish } from "./stop-words/danish.ts";
 import { STOP_LIST as dutch } from "./stop-words/dutch.ts";
 import { STOP_LIST as english } from "./stop-words/english.ts";
@@ -25,6 +22,7 @@ import { STOP_LIST as spanish } from "./stop-words/spanish.ts";
 import { STOP_LIST as swedish } from "./stop-words/swedish.ts";
 
 const STEMMERS: Record<TableLanguage, (word: string) => string> = {
+  chinese: (word) => word,
   danish: snowball.danish,
   dutch: snowball.dutch,
   english: snowball.english,
@@ -43,6 +41,7 @@ const STEMMERS: Record<TableLanguage, (word: string) => string> = {
 };
 
 const STOP_LISTS: Record<TableLanguage, string> = {
+  chinese: "的 了 着 过 地 得 吗 呢 吧 啊 嘛 和 与 及 或 也 都 就 而 并 把 被 在 从 向 对 为 这 那 这些 那些 我 你 他 她 它 我们 你们 他们 她们 它们",
   danish,
   dutch,
   english,
@@ -117,13 +116,13 @@ function memoStem(word: string, language: TableLanguage): string {
 
 // A text's words in lower case, each whole ("dell'oracolo", "don't"): what a
 // stemmer and a stop list read.
-export function stemmerWords(text: string): string[] {
-  return words(text).map((word) => word.toLowerCase());
+export function stemmerWords(text: string, language?: TableLanguage): string[] {
+  return (language === "chinese" ? chineseWords(text) : words(text)).map((word) => word.toLowerCase());
 }
 
 export function stems(text: string, language: TableLanguage): string[] {
   const stop = stopWordsFor(language);
-  return stemmerWords(text)
+  return stemmerWords(text, language)
     .filter((word) => !stop.has(word))
     .map((word) => memoStem(word, language));
 }

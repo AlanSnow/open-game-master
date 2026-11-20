@@ -1,6 +1,6 @@
 import { createCampaign, getCampaignForUser, setDmOutline, type Campaign } from "@/lib/db/campaigns";
 import { getClock, setClockInstant } from "@/lib/db/clock";
-type Locale = "en" | "fr";
+import type { Locale } from "@/lib/i18n/translate";
 import { MINUTES_PER_DAY, MINUTES_PER_HOUR } from "@/lib/dm/calendar";
 
 // The starter one-shot: a table that opens in ten minutes for people who
@@ -52,9 +52,28 @@ export const STARTER_ONE_SHOT_FR = {
   ].join("\n\n"),
 };
 
+const STARTER_ONE_SHOT_ZH = {
+  title: "髓渡镇的无声钟",
+  tagline: "一晚就能玩完的新手冒险，备有可直接选用的角色。",
+  description:
+    "髓渡镇是个只有四十来人的河边村落。两百年来，礼拜堂的钟总会准时报时。三天前的夜里，钟声停了。守钟人从此不见踪影，渡船也不再在天黑后往返。村议会承诺，找出缘由的人每位可得二十枚金币。你们在黄昏抵达，雾正从河面升起。",
+  theme: "薄雾笼罩的河边村庄、山丘上的礼拜堂和它下方的墓穴",
+  outline: [
+    "短篇冒险，三个阶段，一晚结束。场景简短，每两三段旁白给队伍一次决定的机会，第三阶段收尾。角色全程保持 1 级。",
+    "真相：守钟人奥尔多·梅林为了偿还走私债，亲手偷走了礼拜堂的钟。渡船夫塔姆是他的姻亲，帮他把钟藏在礼拜堂下方被水淹没的墓穴里，打算运到下游卖掉。第二天夜里，奥尔多独自回来搬钟，惊扰了沉眠的亡者并丢了性命。如今他以食尸鬼的形态游荡。塔姆又害怕又内疚，一直在撒谎。",
+    "第一阶段，黄昏的村庄：疲倦而精明的赫斯克嬷嬷代表村议会提出报酬。守钟人空荡的住处有一本账簿，记着被划去的债务和一个鱼钩形的走私标记。渡口的塔姆不敢直视来客。对塔姆的游说或洞悉检定成功就能问出债务，失败时队伍仍可带着账簿去礼拜堂。让主动调查的玩家有收获，保留继续前行的路线。",
+    "第二阶段，礼拜堂与墓穴：钟绳有整齐的切口，地上的拖痕一路通往墓穴阶梯。下层淹着齐膝的黑水。威胁依次是藏骨室里的一群巨鼠、阶梯上的套索陷阱（察觉 DC 12，触发时 1d6 伤害），以及在钟旁游荡的食尸鬼奥尔多。四名 1 级角色可以迎战食尸鬼。若队伍只有两三人，给他们把它引入水中或堵门的机会。奥尔多的钥匙还系在脖子上。事先让玩家察觉食尸鬼可能造成麻痹。",
+    "第三阶段，村里的决定：找到钟后，队伍决定要说出多少真相。揭发塔姆，村议会就会驱逐他，渡船得另找人来划。替他隐瞒，钟会照常响起，但这笔债可能在下游引出一场新冒险。无论选择哪一个结局，黎明时钟都会再响。用钟声传过河面的画面结束，并问每位玩家如何花那二十枚金币。",
+    "基调：温和的哥特悬疑，河雾和灯火，避免血腥描写。人物：赫斯克嬷嬷（村议会）、塔姆·里尔（渡船夫）、奥尔多·梅林（守钟人）、佩尔寡妇（经营旅店，知道村里的大小事，愿用传闻换人帮忙照看炉灶）。",
+  ].join("\n\n"),
+};
+
 // The seed the creator reads: the request’s language, English by default,
 // so an English table’s stored premise and spine stay English.
 export function starterSeedFor(locale: Locale) {
+  if (locale === "zh-CN") {
+    return { ...STARTER_ONE_SHOT, ...STARTER_ONE_SHOT_ZH };
+  }
   return locale === "fr" ? { ...STARTER_ONE_SHOT, ...STARTER_ONE_SHOT_FR } : STARTER_ONE_SHOT;
 }
 
@@ -73,6 +92,7 @@ export function createStarterCampaign(userId: string, options: { solo: boolean; 
       dmMode: "ai",
       genre: "high_fantasy",
       campaignLength: "short",
+      ...(options.locale === "zh-CN" ? { tableLanguage: "chinese" } : {}),
       ttsEnabled: options.narration ?? true,
       // The outline is written below, before anyone presses Begin, so the
       // setup pass stands aside (src/lib/dm/setup.ts runs only for a table

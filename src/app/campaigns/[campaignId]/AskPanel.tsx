@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@/lib/ime";
 import { ChevronDown, Loader2, Send, Users } from "lucide-react";
 import { memo, useCallback, useId, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
@@ -303,7 +304,7 @@ function AskDockInner({
               onBlur={names.close}
               {...names.fieldProps}
               onKeyDown={(event) => {
-                if (names.onKeyDown(event)) {
+                if (isImeComposing(event.nativeEvent) || names.onKeyDown(event)) {
                   return;
                 }
                 if (event.key === "Enter" && !event.shiftKey) {

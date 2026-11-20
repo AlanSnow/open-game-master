@@ -15,7 +15,7 @@ export type ProbedLanguage = Exclude<TableLanguage, "english">;
 // What the language check route answers.
 export type EmbeddingLanguageCheck = { language: ProbedLanguage; verdict: EmbeddingLanguageVerdict };
 
-// Measured on the eight probe sentences in all 14 other table languages:
+// Measured on the eight probe sentences for the original non-English languages:
 // all-MiniLM-L6-v2, which reads English only, matched at most 4 (French; most
 // languages 0 to 2), and multilingual-e5-small at least 7 (Irish; 8 in the
 // rest). Six leaves a margin of two on either side. It counts matches rather

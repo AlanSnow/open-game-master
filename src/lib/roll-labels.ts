@@ -11,13 +11,14 @@
 import type { StoredRoll } from "@/lib/db/rolls";
 import { contentName } from "@/lib/content/names";
 import { textKey } from "@/lib/language/text-logic";
+import type { Locale } from "@/lib/i18n/translate";
 
 type Worded = Pick<StoredRoll, "kind" | "detail" | "attacker">;
 
 // The shape of a translator, as the pure sentence builders take it.
-type T = ((key: string, vars?: Record<string, string | number>) => string) & { locale?: "en" | "fr" };
+type T = ((key: string, vars?: Record<string, string | number>) => string) & { locale?: Locale };
 
-function localizeRollWhat(what: string, locale: "en" | "fr"): string {
+function localizeRollWhat(what: string, locale: Locale): string {
   if (locale !== "fr" || !what) return what;
   const key = textKey(what);
   const w = contentName("weapons", key, "fr");
@@ -27,7 +28,7 @@ function localizeRollWhat(what: string, locale: "en" | "fr"): string {
   return what;
 }
 
-function localizeDetail(detail: string, locale: "en" | "fr"): string {
+function localizeDetail(detail: string, locale: Locale): string {
   if (locale !== "fr" || !detail) return detail;
   const vsAt = detail.indexOf(" vs ");
   if (vsAt > 0) {

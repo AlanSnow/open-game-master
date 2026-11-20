@@ -11,6 +11,7 @@
 // Pure: src/lib/embeddings.ts reads it under plain Node, and
 // scripts/test-server-language.mjs pins it.
 
+import { localeFromLanguageTags } from "../i18n/locale.ts";
 import type { TableLanguage } from "../schemas/game-settings-options.ts";
 
 export type EmbeddingModelChoice = {
@@ -48,6 +49,7 @@ export function embeddingModelFor(
 // of that language will look for, by ISO 3166 code.
 export const LANGUAGE_FLAGS: Record<TableLanguage, string> = {
   english: "gb",
+  chinese: "cn",
   danish: "dk",
   dutch: "nl",
   finnish: "fi",
@@ -74,6 +76,8 @@ const BY_CODE: Record<string, TableLanguage> = {
 };
 
 export function languageFromLocale(tag: string | null | undefined): TableLanguage | null {
-  const code = (tag ?? "").trim().toLowerCase().split(/[-_]/)[0] ?? "";
+  const normalized = (tag ?? "").trim().toLowerCase().replaceAll("_", "-");
+  const [code] = normalized.split("-");
+  if (code === "zh") return localeFromLanguageTags([normalized]) === "zh-CN" ? "chinese" : null;
   return Object.hasOwn(BY_CODE, code) ? BY_CODE[code] : null;
 }

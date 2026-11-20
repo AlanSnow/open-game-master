@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@/lib/ime";
 import { Eye, EyeOff, Hand, Loader2, Send } from "lucide-react";
 import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import type { Dispatch, FormEvent, RefObject, SetStateAction } from "react";
@@ -555,6 +556,9 @@ function ComposerInner({
             onBlur={names.close}
             {...names.fieldProps}
             onKeyDown={(event) => {
+              if (isImeComposing(event.nativeEvent)) {
+                return;
+              }
               // Enter picks a name while the menu is up, and sends otherwise.
               if (names.onKeyDown(event)) {
                 return;

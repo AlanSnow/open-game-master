@@ -1,4 +1,4 @@
-export type Locale = "en" | "fr";
+export type Locale = "en" | "fr" | "zh-CN";
 
 export type TranslateVars = Record<string, string | number> & {
   context?: string;
@@ -10,14 +10,11 @@ type Catalog = {
   plurals: Record<string, [string, string]>;
 };
 
-// The French catalog is about 1 MB of JSON (340 KiB gzip). Imported here it
-// rode in the first load of every page, French reader or not (the shared
-// LocaleApplier and every useT pull this module in). It is installed
-// instead: on the server at start (fr-catalog.ts, from instrumentation.ts,
-// the root layout and request-locale.ts), in a browser on demand when the
-// reader's language is French (catalog-loader.ts, its own chunk). Until a
-// catalog is installed its locale reads English, the source. The store sits
-// on globalThis so the server's module layers (route, page, SSR) share one.
+// The shared LocaleApplier and every useT pull this module in. Each catalog
+// is installed on the server and loaded in a separate chunk in the browser
+// (catalog-loader.ts), so selecting a language only fetches its own catalog.
+// The store sits on globalThis so the server's route, page and SSR layers
+// share it.
 const STORE = "__odmI18nCatalogs";
 
 function catalogs(): Partial<Record<Locale, Catalog>> {
@@ -47,16 +44,15 @@ function interpolate(template: string, vars?: TranslateVars): string {
 
 // Gettext-style translation: English is the key and fallback.
 // When `vars.context` is given and an override exists in `contexts`,
-// that disambiguated French string wins over the default entry.
+// that disambiguated string wins over the default entry.
 export function translate(locale: Locale, english: string, vars?: TranslateVars): string {
-  let text = english;
-  const FR = locale === "fr" ? catalogs().fr : undefined;
-  if (FR) {
-    const ctx = vars?.context;
-    const ctxMatch = ctx ? FR.contexts[english]?.[ctx] : undefined;
-    text = ctxMatch ?? FR.messages[english] ?? english;
-  }
-  return interpolate(text, vars);
+  const catalog = locale === "en" ? undefined : catalogs()[locale];
+  const context = vars?.context;
+  const variant = context && catalog && Object.hasOwn(catalog.contexts, english) ? catalog.contexts[english] : undefined;
+  const message = variant && context && Object.hasOwn(variant, context)
+    ? variant[context]
+    : catalog && Object.hasOwn(catalog.messages, english) ? catalog.messages[english] : english;
+  return interpolate(message, vars);
 }
 
 export function translatePlural(
@@ -66,12 +62,12 @@ export function translatePlural(
   vars: TranslateVars & { count: number },
 ): string {
   const isOne = locale === "fr" ? vars.count <= 1 : vars.count === 1;
-  const FR = locale === "fr" ? catalogs().fr : undefined;
-  if (FR) {
-    const pair = FR.plurals[`${englishOne}\0${englishOther}`];
-    if (pair) {
-      return interpolate(isOne ? pair[0] : pair[1], vars);
-    }
+  const pair = locale === "en" ? undefined : catalogs()[locale]?.plurals[`${englishOne}\0${englishOther}`];
+  if (pair) {
+    return interpolate(isOne && locale !== "zh-CN" ? pair[0] : pair[1], vars);
   }
-  return interpolate(isOne ? englishOne : englishOther, vars);
+  // Most Chinese labels use the same wording for every count. Let the
+  // ordinary catalog carry this form when there is no pair-specific entry;
+  // an untranslated term still follows the English count on the fallback.
+  return translate(locale, isOne ? englishOne : englishOther, vars);
 }

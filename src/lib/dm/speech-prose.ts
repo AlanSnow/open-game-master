@@ -177,9 +177,9 @@ export function gendersIn(text: string, reading: Reading): GenderMark[] {
 
 export type Sentence = { text: string; start: number };
 
-// A sentence ends at . ! ? or … before a capital, a quote or the end of the
-// text, and at every line break; "It's... consumption" stays one sentence.
-const SENTENCE_END = /[.!?…]+["'”’»«)\]*_]*(?=\s+[\p{Lu}"“‘'«»„*_(\[]|\s*$)|\n+/gu;
+// Chinese sentences need no following space or capital after their own
+// fullwidth punctuation. For Latin punctuation, keep the abbreviation guard.
+const SENTENCE_END = /[。！？]+[”’」』)\]*_]*|[.!?…]+["'”’»«)\]*_]*(?=\s+[\p{Lu}"“‘'«»„*_(\[]|\s*$)|\n+/gu;
 
 export function sentencesOf(text: string): Sentence[] {
   const out: Sentence[] = [];

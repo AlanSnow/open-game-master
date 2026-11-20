@@ -72,9 +72,10 @@ const dictate = async (campaignId) => {
   return sent.at(-1).language;
 };
 
-await test("each of the 15 table languages has Whisper's code; Irish, which Whisper does not know, has none", () => {
+await test("each table language has Whisper's code; Irish, which Whisper does not know, has none", () => {
   const codes = Object.fromEntries(TABLE_LANGUAGES.map((language) => [language, whisperLanguageCode(language)]));
   assert.deepEqual(codes, {
+    chinese: "zh",
     danish: "da",
     dutch: "nl",
     english: "en",
@@ -112,9 +113,10 @@ await test("the phone's own recognizer is asked for every table language as Andr
   const tags = Object.fromEntries(TABLE_LANGUAGES.map((language) => [language, deviceSpeechLanguage(language)]));
   assert.equal(tags.irish, "ga", "the phone may know Irish where Whisper does not");
   assert.equal(tags.norwegian, "nb", "Android's Norwegian is Bokmal");
+  assert.equal(tags.chinese, "zh-CN", "the phone reads simplified Chinese");
   for (const language of TABLE_LANGUAGES) {
-    assert.match(tags[language], /^[a-z]{2}$/, language);
-    if (language !== "irish" && language !== "norwegian") {
+    assert.match(tags[language], /^[a-z]{2}(?:-[A-Z]{2})?$/, language);
+    if (language !== "irish" && language !== "norwegian" && language !== "chinese") {
       assert.equal(tags[language], whisperLanguageCode(language), language);
     }
   }
@@ -124,9 +126,9 @@ await test("the phone's own recognizer is asked for every table language as Andr
 process.env.STT_URL = "http://stt.test:8870";
 process.env.STT_MODEL = "large-v3";
 
-await test("the Whisper service hears a member's clip in the table's language, in five languages", async () => {
+await test("the Whisper service hears a member's clip in the table's language", async () => {
   as(lead);
-  for (const [language, code] of [["english", "en"], ["italian", "it"], ["french", "fr"], ["spanish", "es"], ["german", "de"]]) {
+  for (const [language, code] of [["english", "en"], ["italian", "it"], ["french", "fr"], ["spanish", "es"], ["german", "de"], ["chinese", "zh"]]) {
     assert.equal(await dictate(tableIn(language)), code, language);
     assert.equal(sent.at(-1).url, "http://stt.test:8870/v1/audio/transcriptions");
   }

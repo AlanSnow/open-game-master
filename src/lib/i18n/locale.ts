@@ -3,16 +3,35 @@ import type { Locale } from "./translate";
 export const LOCALE_COOKIE = "odm_locale";
 
 export function parseLocale(raw: string | null | undefined): Locale | null {
-  if (raw === "fr" || raw === "en") return raw;
+  const tag = raw?.trim().toLowerCase();
+  if (tag === "fr" || tag === "en") return tag;
+  if (tag === "zh" || tag === "zh-cn") return "zh-CN";
   return null;
 }
 
-// The menus' language a server's own language asks for (global config
-// serverLanguage, set by its admin): French, the one translation the menus
-// have besides English. English is every server's default and says nothing
-// about its readers, so it leaves the choice to them and their browser.
+// The server's table language is an automatic menu preference where that
+// translation exists. English is the default, so it lets the device choose.
 export function localeOfServerLanguage(language: string | null | undefined): Locale | null {
-  return language === "french" ? "fr" : null;
+  if (language === "french") return "fr";
+  if (language === "chinese") return "zh-CN";
+  return null;
+}
+
+export function localeFromLanguageTags(tags: readonly string[]): Locale {
+  for (const raw of tags) {
+    const tag = raw.trim().toLowerCase();
+    const language = tag.split("-")[0];
+    if (language === "en" || language === "fr") return language;
+    if (language === "zh") {
+      try {
+        // Traditional Chinese falls through to the next device preference.
+        if (new Intl.Locale(tag).maximize().script === "Hans") return "zh-CN";
+      } catch {
+        // Ignore malformed language tags supplied by callers.
+      }
+    }
+  }
+  return "en";
 }
 
 export function localeFromAcceptLanguage(header: string | null | undefined): Locale {
@@ -23,15 +42,11 @@ export function localeFromAcceptLanguage(header: string | null | undefined): Loc
       const [tag, ...params] = part.split(";");
       const q = params.map((param) => /^\s*q\s*=\s*([0-9.]+)\s*$/i.exec(param)?.[1]).find((value) => value !== undefined);
       const weight = q === undefined ? 1 : Number(q);
-      return { tag: tag.trim().toLowerCase(), weight: Number.isFinite(weight) ? weight : 0, at };
+      return { tag, weight: Number.isFinite(weight) ? weight : 0, at };
     })
     .filter(({ weight }) => weight > 0)
     .sort((a, b) => b.weight - a.weight || a.at - b.at);
-  for (const { tag } of tags) {
-    if (tag === "fr" || tag.startsWith("fr-")) return "fr";
-    if (tag === "en" || tag.startsWith("en-")) return "en";
-  }
-  return "en";
+  return localeFromLanguageTags(tags.map(({ tag }) => tag));
 }
 
 function cookieValue(cookieHeader: string | null, name: string): string | null {

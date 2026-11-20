@@ -79,6 +79,24 @@ await test("Prose calls carry the directive at an Italian table and read exactly
   }
 });
 
+await test("A Chinese action and its narration flow through a normal DM turn.", async () => {
+  const chinese = await openWorld({ gameSettings: { ttsEnabled: false, tableLanguage: "chinese" } });
+  const hero = chinese.addHero({ name: "林岚", class: "fighter", level: 3 });
+  const model = await fakeModel();
+  model.pointAt(chinese);
+  const action = "我推开大厅的门。";
+  const narration = "柜台后空无一人，一盏油灯在风里摇晃。";
+  model.script([reply({ text: narration })]);
+  try {
+    const message = await model.turn(chinese, action, hero.id);
+    assert.equal(message.content, narration);
+    assert.ok(model.requests.some((request) => system(request).includes(languageDirective("chinese"))));
+    assert.ok(model.requests.some((request) => request.messages.some((entry) => String(entry.content).includes(action))));
+  } finally {
+    model.close();
+  }
+});
+
 await test("The claims reader, which only a machine reads, never carries the directive.", async () => {
   const sent = await prompts((campaign) =>
     readClaims(campaign, {

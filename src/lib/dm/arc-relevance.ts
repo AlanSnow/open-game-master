@@ -14,7 +14,7 @@
 // can load it directly. A match never fires an event: the render still says
 // these are opportunities, and the DM decides.
 
-import { searchWords, textKey } from "../language/text-logic.ts";
+import { isSearchTerm, searchWords, textKey } from "../language/text-logic.ts";
 
 export type SceneCues = {
   location?: string;
@@ -71,7 +71,7 @@ type CueTerms = { phrases: string[]; words: Set<string>; stopWords: ReadonlySet<
 export function cueTerms(cues: SceneCues): CueTerms {
   const phrases = [cues.location ?? "", ...(cues.npcs ?? []), ...(cues.enemies ?? [])]
     .map((phrase) => textKey(phrase))
-    .filter((phrase) => phrase.length >= 3);
+    .filter(isSearchTerm);
   const loose = new Set<string>();
   for (const source of [cues.location, cues.scene, cues.recent, ...(cues.npcs ?? []), ...(cues.enemies ?? [])]) {
     for (const word of searchWords(source ?? "", cues.stopWords)) {

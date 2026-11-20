@@ -69,13 +69,13 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(data.error || t("Could not join the campaign."));
+        setError(data.error || "Could not join the campaign.");
         setState("error");
         return;
       }
       navigateTo(`/campaigns/${data.campaign.id}`);
     } catch {
-      setError(t("Could not reach the server.", { context: "join.unreachable" }));
+      setError("Could not reach the server.");
       setState("error");
     }
   }, [roomCode]);
@@ -150,7 +150,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
                 role="alert"
                 className="motion-shake rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
               >
-                {error}
+                {t(error)}
               </p>
               <Link href="/" className={ui.btnSecondary}>
                 {t("Back to Open Game Master")}

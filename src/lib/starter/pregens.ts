@@ -1,5 +1,5 @@
 import type { CreateSheetInput } from "@/lib/schemas/sheet";
-type Locale = "en" | "fr";
+import type { Locale } from "@/lib/i18n/translate";
 
 // Four ready-made heroes for a table that wants to start in ten minutes.
 // Each is a complete level 1 sheet in the shape the character builder
@@ -191,11 +191,11 @@ export const PREGENS: Pregen[] = [
 
 export function pregenById(id: string, locale: Locale = "en"): Pregen | null {
   const pregen = PREGENS.find((pregen) => pregen.id === id) ?? null;
-  if (!pregen || locale !== "fr") {
+  if (!pregen) {
     return pregen;
   }
-  const fr = PREGEN_TEXT_FR[id];
-  return fr ? { ...pregen, tagline: fr.tagline, blurb: fr.blurb, sheet: { ...pregen.sheet, backstory: fr.backstory } } : pregen;
+  const text = PREGEN_TEXT[locale]?.[id];
+  return text ? { ...pregen, tagline: text.tagline, blurb: text.blurb, sheet: { ...pregen.sheet, backstory: text.backstory } } : pregen;
 }
 
 // The heroes' own words in French: the picker's line, the card's pitch and
@@ -203,7 +203,9 @@ export function pregenById(id: string, locale: Locale = "en"): Pregen | null {
 // a French table's library reads French and an English table's stays as it
 // was. Equipment, spells and traits are not here: those translate at render
 // (src/lib/content/names.ts).
-const PREGEN_TEXT_FR: Record<string, { tagline: string; blurb: string; backstory: string }> = {
+type PregenText = { tagline: string; blurb: string; backstory: string };
+
+const PREGEN_TEXT_FR: Record<string, PregenText> = {
   brakk: {
     tagline: "Brakk, barbare humain",
     blurb: "Frappe d’abord, demande ensuite. Brandis la hache à deux mains, encaisse les coups et garde les autres en vie en te tenant devant eux.",
@@ -226,15 +228,43 @@ const PREGEN_TEXT_FR: Record<string, { tagline: string; blurb: string; backstory
   },
 };
 
+const PREGEN_TEXT_ZH: Record<string, PregenText> = {
+  brakk: {
+    tagline: "布拉克，人类野蛮人",
+    blurb: "挥动巨斧，扛住迎面而来的攻击，为队友守住前线。",
+    backstory: "布拉克出生在高山隘口。牧群死去后，他下到平原生活，从此没找到回去的理由。",
+  },
+  kara: {
+    tagline: "卡拉，人类战士",
+    blurb: "长剑、盾牌和锁子甲。她难以被击中，也几乎没人能把她从守住的位置上推开。遇到关着的门，她总有主意。",
+    backstory: "卡拉在一位河畔男爵的卫队服役十年。男爵付不起军饷，她才离开。她如今仍习惯行礼。",
+  },
+  vex: {
+    tagline: "维克斯，人类游荡者",
+    blurb: "开锁、潜行、用细剑找敌人的破绽。走在队伍前头，赶在陷阱被触发前发现它。",
+    backstory: "一笔债追上维克斯之前，他离开了城里的行会。他把欠别人情的人记在一张清单上，自己欠谁则记在另一张更短的清单上。",
+  },
+  sera: {
+    tagline: "塞拉，人类牧师，生命领域",
+    blurb: "拿着硬头锤和盾牌，用治疗真言稳住队友，用祝福术为队伍助力。她自己也能守住阵线。",
+    backstory: "塞拉在礼拜堂长大。她发现，平静的声音和稳当的双手，往往比布道更能帮助人。",
+  },
+};
+
+const PREGEN_TEXT: Partial<Record<Locale, Record<string, PregenText>>> = {
+  fr: PREGEN_TEXT_FR,
+  "zh-CN": PREGEN_TEXT_ZH,
+};
+
 // What the picker shows: no sheet, nothing to tamper with.
 export function pregenSummaries(locale: Locale = "en") {
   return PREGENS.map((pregen) => {
-    const fr = locale === "fr" ? PREGEN_TEXT_FR[pregen.id] : undefined;
+    const text = PREGEN_TEXT[locale]?.[pregen.id];
     return {
       id: pregen.id,
       name: pregen.sheet.name,
-      tagline: fr ? fr.tagline : pregen.tagline,
-      blurb: fr ? fr.blurb : pregen.blurb,
+      tagline: text?.tagline ?? pregen.tagline,
+      blurb: text?.blurb ?? pregen.blurb,
       race: pregen.sheet.race,
       class: pregen.sheet.class,
     };

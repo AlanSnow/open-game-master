@@ -170,16 +170,16 @@ const SKILLS = (skillsJson as { skills: Array<{ id: string; name: string; fr?: s
 export function describeSkill(
   t: (key: string, vars?: Record<string, string | number>) => string,
   skillId: string,
-  locale: "en" | "fr" = "en",
+  locale: Locale = "en",
 ): string | null {
   const skill = SKILLS.find((entry) => entry.id === skillId.trim().toLowerCase());
   if (!skill) {
     return null;
   }
   const ability = glossaryTerm(skill.ability);
-  const skillName = locale === "fr" && skill.fr ? skill.fr : skill.name;
+  const skillName = locale === "fr" && skill.fr ? skill.fr : t(skill.name);
   const abilityName =
-    locale === "fr" && ability?.fr ? ability.fr : ability?.term ?? skill.ability.toUpperCase();
+    locale === "fr" && ability?.fr ? ability.fr : t(ability?.term ?? skill.ability.toUpperCase());
   return `${t("{skill} uses {ability}.", { skill: skillName, ability: abilityName })} ${
     (locale === "fr" && ability?.shortFr ? ability.shortFr : ability?.short) ?? ""
   }`.trim();

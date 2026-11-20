@@ -87,7 +87,7 @@ export function JoinCard({ inputRef }: { inputRef: RefObject<HTMLInputElement | 
           <img src="/assets/ui/wax-seal.webp" alt="" className="motion-pop ts-seal" />
         ) : null}
       </form>
-      {joinError ? <p className="motion-shake ts-error">{joinError}</p> : null}
+      {joinError ? <p className="motion-shake ts-error">{t(joinError)}</p> : null}
     </section>
   );
 }

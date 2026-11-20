@@ -6,6 +6,19 @@ import { cn } from "@/lib/cn";
 // letters, and the apps draw the same screens on every system. Each is the
 // flag at 3:2, simplified where a full coat of arms would not read at 20px.
 const FLAGS: Record<string, React.ReactNode> = {
+  cn: (
+    <>
+      <rect width="30" height="20" fill="#DE2910" />
+      <path
+        fill="#FFDE00"
+        d="M5 2l.68 2.07h2.17L6.09 5.35l.68 2.08L5 6.15 3.23 7.43l.68-2.08-1.76-1.28h2.17L5 2z
+           M9.14 2.51l.44-.58-.42-.60.69.24.44-.58-.01.73.69.24-.70.21-.01.73-.42-.60z
+           M11.02 4.14l.65-.30-.09-.72.50.53.66-.30-.35.63.49.53-.71-.14-.35.63-.09-.72z
+           M11.04 6.74l.72-.11.12-.71.33.65.72-.11-.52.51.32.65-.64-.34-.53.51.13-.72z
+           M9.21 8.37l.69.23.43-.59-.01.73.69.22-.69.22v.73l-.42-.59-.69.22.43-.58z"
+      />
+    </>
+  ),
   gb: (
     <>
       <rect width="30" height="20" fill="#012169" />

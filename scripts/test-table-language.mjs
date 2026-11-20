@@ -31,7 +31,7 @@ const { mintSession } = await import("../src/lib/auth.ts");
 const { getCampaignById } = await import("../src/lib/db/campaigns.ts");
 const { buildDmSystem } = await import("../src/lib/dm/prompt.ts");
 const { languageDirective } = await import("../src/lib/dm/table-language-logic.ts");
-const { TABLE_LANGUAGES } = await import("../src/lib/schemas/game-settings-options.ts");
+const { TABLE_LANGUAGES, TABLE_LANGUAGE_NAMES } = await import("../src/lib/schemas/game-settings-options.ts");
 const { THIS_TURN_HEADING } = await import("../src/lib/prompt-boundary.ts");
 
 // A URL, not a template literal: Vitest would read the literal as a one-level
@@ -78,6 +78,7 @@ async function newCampaign(gameSettings) {
 await test("a new campaign plays in English unless it says otherwise", async () => {
   assert.equal(getCampaignById(await newCampaign({})).gameSettings.tableLanguage, "english");
   assert.equal(getCampaignById(await newCampaign({ tableLanguage: "italian" })).gameSettings.tableLanguage, "italian");
+  assert.equal(getCampaignById(await newCampaign({ tableLanguage: "chinese" })).gameSettings.tableLanguage, "chinese");
 });
 
 await test("a campaign stored before the setting existed reads as English", async () => {
@@ -115,7 +116,7 @@ await test("English has no directive; every other language names itself", () => 
   assert.equal(languageDirective("english"), "");
   for (const language of TABLE_LANGUAGES.filter((entry) => entry !== "english")) {
     const directive = languageDirective(language);
-    const name = language[0].toUpperCase() + language.slice(1);
+    const name = TABLE_LANGUAGE_NAMES[language].english;
     assert.ok(directive.startsWith(`TABLE LANGUAGE: The players read ${name}.`), language);
   }
   // What the engine matches stays as it is, and the wording fits every prose
@@ -124,6 +125,8 @@ await test("English has no directive; every other language names itself", () => 
   assert.match(italian, /every listed value and JSON key, written exactly as listed/);
   assert.match(italian, /English rules name/);
   assert.ok(!italian.includes("GAME STATE"));
+  assert.match(languageDirective("chinese"), /Write everything they will read in Simplified Chinese/);
+  assert.match(languageDirective("chinese"), /every listed value and JSON key, written exactly as listed/);
 });
 
 await test("the DM's system prompt carries the directive, and an English one reads as before", async () => {

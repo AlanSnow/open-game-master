@@ -72,6 +72,21 @@ test("packArtUrl points at the art route with the version as a cache-buster", ()
   assert.equal(packArtUrl("berserk", "cover", "1.1.0"), "/api/worlds/berserk/art/cover?v=1.1.0");
 });
 
+test("Chinese places and factions get distinct portable art keys", () => {
+  const place = { name: "旧档案室", blurb: "保存旧卷宗的房间。" };
+  const faction = { name: "守书人", blurb: "看管卷宗的人。" };
+  const placeKey = packArtKey("location", place.name);
+  const factionKey = packArtKey("faction", faction.name);
+  const pack = worldPackSchema.parse(manifest({ locations: [place], factions: [faction] }));
+  const keys = packArtSlots(pack).map((slot) => slot.key);
+  assert.ok(keys.includes(placeKey));
+  assert.ok(keys.includes(factionKey));
+  assert.match(placeKey, PACK_ART_KEY);
+  assert.match(factionKey, PACK_ART_KEY);
+  assert.notEqual(packArtKey("location", place.name), packArtKey("location", "新档案室"));
+  assert.notEqual(artSlug("旧".repeat(20) + "甲"), artSlug("旧".repeat(20) + "乙"));
+});
+
 test("packArtSlots lists the cover first, then what the pack names, in a stable order", () => {
   const slots = packArtSlots(worldPackSchema.parse(manifest()));
   assert.deepEqual(

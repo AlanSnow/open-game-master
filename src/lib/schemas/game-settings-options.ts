@@ -84,12 +84,11 @@ export const STARTING_WEALTH_LABELS: Record<StartingWealthSetting, string> = {
   rolled: "Rolled wealth by class (the server rolls), spent on gear",
 };
 
-// The language the table plays in: the DM writes in it, and the server reads
-// story and player text with its Snowball stemmer and stop list
-// (src/lib/language). Exactly the languages Snowball covers with both, so
-// every one is read the same way; the ids are Snowball's own names.
+// The DM writes in the table's language, and the server reads story and
+// player text with the word boundaries and stop words for that language.
 export const TABLE_LANGUAGES = [
   "english",
+  "chinese",
   "danish",
   "dutch",
   "finnish",
@@ -111,6 +110,7 @@ export type TableLanguage = (typeof TABLE_LANGUAGES)[number];
 // who choose it.
 export const TABLE_LANGUAGE_NAMES: Record<TableLanguage, { english: string; native: string }> = {
   english: { english: "English", native: "English" },
+  chinese: { english: "Simplified Chinese", native: "简体中文" },
   danish: { english: "Danish", native: "Dansk" },
   dutch: { english: "Dutch", native: "Nederlands" },
   finnish: { english: "Finnish", native: "Suomi" },
@@ -136,4 +136,4 @@ export const TABLE_LANGUAGE_LABELS: Record<TableLanguage, string> = Object.fromE
 
 // Shared by the create dialog and the settings panel.
 export const TABLE_LANGUAGE_HELP =
-  "The Game Master writes the story in this language, and the server reads the story and your messages in it. The app, the rules and the rulebook stay in English.";
+  "The Game Master writes the story in this language. Set the interface language separately in account settings.";

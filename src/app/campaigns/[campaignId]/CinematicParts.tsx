@@ -1,5 +1,6 @@
 "use client";
 
+import { isImeComposing } from "@/lib/ime";
 import { isOocAnswer } from "@/lib/dm/ooc-question";
 import { CardReturnedNote } from "@/app/campaigns/[campaignId]/CardReturnedNote";
 import { extraTurnTag, litOrderRows, pointerOrderIndex } from "@/lib/battlemap/initiative-rows";
@@ -746,7 +747,7 @@ export function TabletopChronicle({
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
+                  if (event.key === "Enter" && !event.shiftKey && !isImeComposing(event.nativeEvent)) {
                     event.preventDefault();
                     onSubmit(event);
                   }

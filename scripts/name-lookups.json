@@ -764,14 +764,8 @@
     "app/characters/page.tsx#partial": [["pattern",1,"a fixed pattern over text that reads no record's name: its English words are scripts/text-comparisons.json's to classify"]],
     "app/create-campaign/NarratorFields.tsx#number": [["key",2,"digits a regex already captured, ids, headers, stored and form numbers (number inputs), dice parts, the pack's English text (\"1,000 feet\", a purse); src/: every site read"]],
     "app/create-campaign/VoiceChatFields.tsx#number": [["key",1,"digits a regex already captured, ids, headers, stored and form numbers (number inputs), dice parts, the pack's English text (\"1,000 feet\", a purse); src/: every site read"]],
-    "app/create-campaign/titles.ts#fallback": [
-      [
-        "key",
-        2,
-        "title banks by genre"
-      ]
-    ],
-    "app/create-campaign/titles.ts#whole": [["key",1,"title banks by genre"]],
+    "app/create-campaign/titles.ts#fallback": [["key",3,"title banks by genre"]],
+    "app/create-campaign/titles.ts#whole": [["key",2,"title banks by genre and locale selection"]],
     "app/generated-audio/[...path]/route.ts#partial": [["pattern",1,"a fixed pattern over text that reads no record's name: its English words are scripts/text-comparisons.json's to classify"]],
     "app/reference/CalculatorsPanel.tsx#fallback": [["key",3,"calculator ids and compare slugs"]],
     "app/reference/CalculatorsPanel.tsx#keyed": [["key",2,"ids, refs, slugs, tool names, field names, env names, event kinds, UI keys, caches, door and map keys; a sheet's conditionMeta by the condition key it was written under; the usage route's gear map by the sheet's own stored item names (src/: every site read)"]],
@@ -2577,7 +2571,7 @@
     "lib/language/text-logic.ts#helper": [["search",1,"the records whose name holds a word, listed in a refusal"],["search",1,"the phrase finder itself"]],
     "lib/language/text-logic.ts#normalizer": [["identity",1,"textKey itself"]],
     "lib/language/text-logic.ts#number": [["key",1,"digits a regex already captured, ids, headers, stored and form numbers (number inputs), dice parts, the pack's English text (\"1,000 feet\", a purse); src/: every site read"]],
-    "lib/language/text-logic.ts#partial": [["parse",12,"the text helpers themselves (clipText, unquoted and asSentence among them)"],["search",1,"searchWords: words for a search"],["search",1,"searchWords: stop words dropped"],["pattern",3,"a fixed pattern over text that reads no record's name: its English words are scripts/text-comparisons.json's to classify"],["parse",1,"a digit-group mark checked against the table's grouping"],["parse",1,"splitWords"]],
+    "lib/language/text-logic.ts#partial": [["parse",12,"the text helpers themselves (clipText, unquoted and asSentence among them)"],["search",1,"searchWords: words for a search"],["search",1,"searchWords: stop words dropped"],["pattern",3,"a fixed pattern over text that reads no record's name: its English words are scripts/text-comparisons.json's to classify"],["parse",1,"a digit-group mark checked against the table's grouping"],["parse",1,"splitWords"],["pattern",5,"Han script detection for segmentation, search and name boundaries in prose"]],
     "lib/language/text-logic.ts#whole": [["identity",1,"a record by any of its whole spellings"]],
     "lib/login-throttle.ts#keyed": [["key",2,"ids, refs, slugs, tool names, field names, env names, event kinds, UI keys, caches, door and map keys; a sheet's conditionMeta by the condition key it was written under; the usage route's gear map by the sheet's own stored item names (src/: every site read)"]],
     "lib/login-throttle.ts#normalizer": [["key",2,"slugs, hosts, file names, ids, env values, display text, throttle keys, model ids (src/: every site read)"]],
@@ -3181,6 +3175,7 @@
     "lib/worldforge/web.ts#partial": [["authoring",6,"WorldForge records, types, stubs and links; every site read"]],
     "lib/worlds/art-resize.ts#partial": [["pattern",2,"a fixed pattern over text that reads no record's name: its English words are scripts/text-comparisons.json's to classify"]],
     "lib/worlds/art.ts#normalizer": [["key",1,"slugs, hosts, file names, ids, env values, display text, throttle keys, model ids (src/: every site read)"]],
+    "lib/worlds/art.ts#partial": [["pattern",1,"Unicode letters and numbers used to encode the art filename"]],
     "lib/worlds/catalog.ts#partial": [["key",1,"pack names"]],
     "lib/worlds/draft-check.ts#keyed": [["key",1,"ids, refs, slugs, tool names, field names, env names, event kinds, UI keys, caches, door and map keys; a sheet's conditionMeta by the condition key it was written under; the usage route's gear map by the sheet's own stored item names (src/: every site read)"]],
     "lib/worlds/draft-check.ts#partial": [["key",5,"a world pack's ids against its names (authoring check)"],["pattern",3,"a fixed pattern over text that reads no record's name: its English words are scripts/text-comparisons.json's to classify"]],
@@ -3526,13 +3521,8 @@
     "lib/inventory-art-logic.ts#whole": [["key",1,"a normalized illustration slug matched to an authored special painting key; this selects art, never a rules record"]],
     "lib/inventory-art-logic.ts#partial": [["key",3,"illustration slug prefixes and leading or trailing physical-form tokens select decorative categories after canonical equipment matching"],["pattern",6,"fixed focus, wooden-shield, potion, scroll and rope patterns and the head-word test (a leading form word alone or before of, de, a comma or a bracket) select artwork only; unknown names retain their category icon and no equipment rules depend on the painting"]],
     "lib/inventory-art-logic.ts#keyed": [["key",3,"approved painting ids, physical-form slug keys and shared gear paintings select illustrative assets; a miss keeps the category icon and changes no item identity"]],
-    "lib/i18n/locale.ts#partial": [
-      [
-        "parse",
-        7,
-        "Accept-Language BCP 47 tag/q-weight parsing and cookie header splitting (protocol), never a record's name"
-      ]
-    ],
+    "lib/i18n/locale.ts#normalizer": [["key",1,"browser and HTTP locale tag normalization"]],
+    "lib/i18n/locale.ts#partial": [["parse",6,"Accept-Language BCP 47 tag and weight parsing and cookie header splitting"]],
     "lib/i18n/locale.ts#number": [
       [
         "parse",
@@ -3568,27 +3558,7 @@
         "engine/card kind or id equality checks"
       ]
     ],
-    "lib/dm/damage-logic.ts#keyed": [
-      [
-        "key",
-        2,
-        "French damage type display words (DAMAGE_TYPE_WORDS_FR)"
-      ]
-    ],
-    "lib/locale.tsx#normalizer": [
-      [
-        "key",
-        1,
-        "navigator.language tag normalization"
-      ]
-    ],
-    "lib/locale.tsx#partial": [
-      [
-        "key",
-        1,
-        "navigator.language prefix split"
-      ]
-    ],
+    "lib/dm/damage-logic.ts#keyed": [["key",1,"French damage type display words (DAMAGE_TYPE_WORDS_FR)"]],
     "lib/characters/class-words.ts#whole-single": [
       [
         "identity",

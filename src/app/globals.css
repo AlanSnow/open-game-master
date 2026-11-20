@@ -431,6 +431,14 @@ body {
   overscroll-behavior-y: none;
 }
 
+html:lang(zh-CN) body {
+  font-family: var(--font-ui), "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+}
+
+html:lang(zh-CN) :is(.font-display, .font-serif) {
+  font-family: var(--font-source-serif), "SimSun", "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+}
+
 /* The whole app sits under a fixed night sky: faint star specks plus film
    grain, behind all content. Pure CSS + inline SVG, zero requests. */
 body::before {

@@ -21,6 +21,16 @@ export const PROBE_ENGLISH: readonly string[] = [
 ];
 
 export const PROBE_SENTENCES: Record<ProbedLanguage, readonly string[]> = {
+  chinese: [
+    "那位老妇人昨天早上卖给我们面包。",
+    "我的哥哥害怕那片黑暗的森林。",
+    "下雨前我们就渡过了河。",
+    "她把钥匙藏在门边的一块石头底下。",
+    "狗追着自己的尾巴转圈，孩子们被逗笑了。",
+    "他弄丢了靴子，只好光着脚走回家。",
+    "我们的马累了，需要喝水。",
+    "今晚风很冷，天空很晴朗。",
+  ],
   danish: [
     "Den gamle kvinde solgte os brød i går morges.",
     "Min bror er bange for den mørke skov.",

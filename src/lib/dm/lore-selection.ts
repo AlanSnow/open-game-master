@@ -157,9 +157,9 @@ function namedByAsk(candidates: LoreCandidate[], ask: string, language: TableLan
   const holders = new Map<string, { word: string; ids: string[] }>();
   for (const candidate of candidates) {
     const counted = new Set<string>();
-    for (const word of stemmerWords(`${candidate.title} ${candidate.tags.join(" ")}`)) {
+    for (const word of stemmerWords(`${candidate.title} ${candidate.tags.join(" ")}`, language)) {
       const stem = stop.has(word) ? "" : stemWord(word, language);
-      if (stem.length <= 2 || !asked.has(stem) || counted.has(stem)) {
+      if (!asked.has(stem) || counted.has(stem)) {
         continue;
       }
       counted.add(stem);

@@ -62,6 +62,18 @@ test("the one-shot campaign carries its premise, its secret outline and a short 
   assert.equal(solo.role, "owner");
 });
 
+test("a Simplified Chinese quick start stores its premise and narration language", () => {
+  const campaign = createStarterCampaign(host.id, { solo: false, locale: "zh-CN" });
+  const stored = getCampaignById(campaign.id);
+  assert.equal(stored.gameSettings.tableLanguage, "chinese");
+  assert.match(stored.title, /无声钟/);
+  assert.match(stored.description, /礼拜堂/);
+  assert.match(stored.dmOutline, /守钟人/);
+  assert.match(pregenSummaries("zh-CN")[0].tagline, /野蛮人/);
+  assert.match(pregenById("sera", "zh-CN").sheet.backstory, /礼拜堂/);
+  assert.equal(pregenById("sera", "zh-CN").sheet.class, pregenById("sera").sheet.class);
+});
+
 // The premise says "you arrive at dusk", and the DM narrates the hour the
 // clock shows; a campaign's clock otherwise opens at eight in the morning.
 test("the one-shot's clock opens at dusk, as its premise does, on the day a campaign opens", () => {

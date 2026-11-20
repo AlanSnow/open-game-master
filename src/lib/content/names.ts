@@ -11,7 +11,7 @@
 // (src/lib/srd/index.ts) already works for skills.
 
 import { textKey } from "@/lib/language/text-logic";
-type Locale = "en" | "fr";
+import { translate, type Locale } from "@/lib/i18n/translate";
 import { srdRaceId } from "@/lib/srd/race-id";
 import { frTables } from "@/lib/i18n/fr-tables";
 
@@ -148,7 +148,13 @@ export function contentName(
   locale: Locale,
 ): string {
   const row: NamedRow = typeof ref === "string" ? { name: ref } : ref;
-  if (locale !== "fr" || !row.name || (row.source && row.source !== "open5e")) {
+  if (!row.name || (row.source && row.source !== "open5e")) {
+    return row.name;
+  }
+  if (locale === "zh-CN") {
+    return translate(locale, row.name);
+  }
+  if (locale !== "fr") {
     return row.name;
   }
   const tables: readonly FrNamesTable[] = table === "items" ? ITEM_TABLES : [table];
@@ -170,6 +176,9 @@ export function contentName(
 // not carry (an artificer's, as the French SRD does not print the class, or a
 // workshop class's) stays English.
 export function classFeatureName(classId: string, featureName: string, locale: Locale): string {
+  if (locale === "zh-CN") {
+    return translate(locale, featureName);
+  }
   if (locale !== "fr" || !featureName) {
     return featureName;
   }

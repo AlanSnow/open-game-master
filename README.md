@@ -20,6 +20,8 @@
 
 </div>
 
+[简体中文界面、中文主持与 Windows 使用说明](docs/zh-CN.md)
+
 > [!NOTE]
 > Open Game Master was called Open Dungeon Master until October 2026. The apps,
 > worlds and accounts carry over unchanged; only the name and the website

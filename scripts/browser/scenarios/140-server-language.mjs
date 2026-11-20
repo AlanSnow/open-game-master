@@ -23,7 +23,9 @@ export default {
 
     await t.tap(trigger);
     const rows = page.getByRole("menuitemradio").locator("visible=true");
-    await eventually(async () => (await rows.count()) === 15, { label: "fifteen languages in the list" });
+    await eventually(async () => (await rows.count()) === 16, { label: "sixteen languages in the list" });
+    const chinese = rows.filter({ hasText: "简体中文" });
+    check((await chinese.count()) === 1, "the server supports simplified Chinese");
     const french = rows.filter({ hasText: "Français" }).first();
     check(/French/.test(await french.innerText()), "a row names the language in English too");
     check((await french.locator("svg").count()) === 1, "each row carries a flag");

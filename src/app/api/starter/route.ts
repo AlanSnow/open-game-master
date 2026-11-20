@@ -5,14 +5,13 @@ import { campaignCreationRefusal, canCreateCampaigns } from "@/lib/shared-host";
 import { createStarterCampaign, starterSeedFor } from "@/lib/starter/one-shot";
 import { narrationAvailable, NO_STORYTELLER_MESSAGE, storytellerConfigured } from "@/lib/capabilities";
 import { pregenSummaries } from "@/lib/starter/pregens";
-import { bookLocaleOf } from "@/lib/rulebook/book";
+import { bookLocaleOf } from "@/lib/request-locale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // The starter one-shot (src/lib/starter/one-shot.ts): what it is, and the
-// heroes that come with it — in the request's language, so the card a
-// French reader sees is the table they will get.
+// heroes that come with it in the reader's interface language.
 export async function GET(request: Request) {
   const user = await currentUser();
   if (!user) {

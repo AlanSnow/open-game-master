@@ -38,6 +38,7 @@ import { itemCastNumbers, runningItemSpell } from "@/lib/srd/item-cast-credit";
 import type { SrdBackground, SrdClass, SrdRace, SrdSkill } from "@/lib/srd/srd-types";
 import { textKey } from "@/lib/language/text-logic";
 import { infusionWorn } from "@/lib/srd/infusions";
+import { translate, type Locale } from "@/lib/i18n/translate";
 
 export type { SrdBackground, SrdClass, SrdRace, SrdSkill } from "@/lib/srd/srd-types";
 
@@ -46,12 +47,12 @@ export const SRD_SKILLS = skillsJson.skills as SrdSkill[];
 // A skill's name in the reader's language. The French names come from
 // Wizards of the Coast's official French SRD 5.1 (see skills.json's fr
 // field); a name the locale does not carry stays English.
-export function skillLabel(skillId: string, locale: "en" | "fr"): string {
+export function skillLabel(skillId: string, locale: Locale): string {
   const skill = SRD_SKILLS.find((entry) => entry.id === skillId.trim().toLowerCase());
   if (!skill) {
     return skillId;
   }
-  return locale === "fr" && skill.fr ? skill.fr : skill.name;
+  return locale === "fr" && skill.fr ? skill.fr : translate(locale, skill.name);
 }
 export const SRD_CLASSES = classesJson.classes as SrdClass[];
 export const SRD_RACES = racesJson.races as SrdRace[];

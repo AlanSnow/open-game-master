@@ -6,9 +6,11 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const { asSentence, clipText, compareNames, words, textKey, containsPhrase, unquoted } = await import("../src/lib/language/text-logic.ts");
+const { asSentence, clipText, compareNames, words, textKey, containsPhrase, namesPattern, unquoted } = await import("../src/lib/language/text-logic.ts");
 const { stems, stopWordsFor, stemWord } = await import("../src/lib/language/language.ts");
 const { TABLE_LANGUAGES } = await import("../src/lib/schemas/game-settings-options.ts");
+const { isImeComposing } = await import("../src/lib/ime.ts");
+const { tokenize, computeIdf, lexicalScore } = await import("../src/lib/dm/fusion-logic.ts");
 
 let passed = 0;
 function test(name, fn) {
@@ -50,9 +52,27 @@ test("a clause becomes a sentence without a second full stop (issue 644)", () =>
 
 test("every table language has a stemmer and a stop list", () => {
   for (const language of TABLE_LANGUAGES) {
-    assert.ok(stopWordsFor(language).size > 50, language);
+    assert.ok(stopWordsFor(language).size > (language === "chinese" ? 0 : 50), language);
     assert.equal(typeof stemWord("test", language), "string", language);
   }
+});
+
+test("Chinese prose can surface names and two-character terms without spaces", () => {
+  assert.deepEqual(stems("我。把。记录。", "chinese"), ["记录"]);
+  assert.ok(tokenize("我想查看档案", "chinese").includes("档案"));
+  const documents = ["陈小白把档案锁了起来。", "船长在修理船桨。"];
+  const idf = computeIdf(documents, "chinese");
+  assert.ok(lexicalScore("档案", documents[0], idf, "chinese") > 0);
+  assert.equal(lexicalScore("档案", documents[1], idf, "chinese"), 0);
+  assert.ok(containsPhrase("玩家请陈小白打开锁。", "陈小白"));
+  assert.deepEqual("陈小白说，等一等。".match(namesPattern(["陈小白"], "gu")), ["陈小白"]);
+  assert.equal(asSentence("他说完了。"), "他说完了。");
+});
+
+test("confirming a Chinese IME candidate is distinct from pressing Enter to send", () => {
+  assert.ok(isImeComposing({ isComposing: true, keyCode: 13 }));
+  assert.ok(isImeComposing({ isComposing: false, keyCode: 229 }));
+  assert.ok(!isImeComposing({ isComposing: false, keyCode: 13 }));
 });
 
 test("singular and regular plural share a stem in each language", () => {

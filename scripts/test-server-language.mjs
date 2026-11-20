@@ -53,6 +53,10 @@ test("a browser language becomes the wizard's first guess, or nothing", () => {
   assert.equal(languageFromLocale("nb"), "norwegian");
   assert.equal(languageFromLocale("pt_BR"), "portuguese");
   assert.equal(languageFromLocale("en-US"), "english");
+  assert.equal(languageFromLocale("zh"), "chinese");
+  assert.equal(languageFromLocale("zh_CN"), "chinese");
+  assert.equal(languageFromLocale("zh-Hans-SG"), "chinese");
+  assert.equal(languageFromLocale("zh-Hant-TW"), null);
   assert.equal(languageFromLocale("ja-JP"), null);
   assert.equal(languageFromLocale("constructor"), null);
   assert.equal(languageFromLocale(""), null);

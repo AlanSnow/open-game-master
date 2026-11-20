@@ -98,7 +98,7 @@ export function ChangePasswordForm({
           className={ui.input}
         />
       </label>
-      {error ? <p className="motion-shake text-sm text-red-400">{error}</p> : null}
+      {error ? <p className="motion-shake text-sm text-red-400">{t(error)}</p> : null}
       <button type="submit" disabled={busy} aria-busy={busy} className={cn(ui.btnPrimary, "w-full")}>
         {busy ? <Loader2 className="size-4 animate-spin" /> : null}
         {submitLabel ?? t("Change password")}

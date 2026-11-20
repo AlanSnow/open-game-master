@@ -16,6 +16,7 @@
 // Client-safe on purpose: no fs, no Buffer, no database.
 
 import { raceShowsOwnFace } from "@/lib/placeholders";
+import { fnv1a } from "@/lib/overworld/logic";
 
 export const PACK_ART_KEY = /^[a-z0-9][a-z0-9-]{0,79}$/;
 
@@ -57,13 +58,28 @@ export const PACK_ART_ASPECT: Record<PackArtKind, "square" | "landscape"> = {
 // so their key is their name folded this way; the validator refuses a pack
 // whose two locations fold to the same key.
 export function artSlug(value: string): string {
-  return String(value ?? "")
+  const normalized = String(value ?? "")
     .toLowerCase()
     .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u0300-\u036f]/g, "");
+  const ascii = normalized
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
+  if (ascii) {
+    return ascii;
+  }
+  // A name such as "旧档案室" needs an art slot even when it has no Latin
+  // letters. Preserve existing ASCII slugs and encode the other names into
+  // the same file-safe alphabet both the browser and art tools expect.
+  const letters = normalized.match(/[\p{L}\p{N}]/gu);
+  if (!letters) {
+    return "";
+  }
+  const encoded = letters.map((letter) => letter.codePointAt(0)!.toString(16)).join("-");
+  return encoded.length <= 58
+    ? `u-${encoded}`
+    : `u-${encoded.slice(0, 49)}-${fnv1a(encoded).toString(16).padStart(8, "0")}`;
 }
 
 export function packArtKey(kind: PackArtKind, ref = ""): string {

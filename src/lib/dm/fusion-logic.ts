@@ -15,13 +15,13 @@
 
 import type { TableLanguage } from "../schemas/game-settings-options.ts";
 import { stems } from "../language/language.ts";
-import { textKey } from "../language/text-logic.ts";
+import { isSearchTerm, textKey } from "../language/text-logic.ts";
 
 // The terms a text is scored by: Snowball stems in the table's language,
 // its function words dropped (src/lib/language), so "dell'Oracolo" and
 // "oracolo" are one term and "della" is none at an Italian table, as
-// "spiders" and "spider" are one at an English one. Two-letter stems carry
-// no signal.
+// "spiders" and "spider" are one at an English one. Two-character Chinese
+// words still carry signal, so a Latin short-stem cutoff would lose them.
 //
 // search_lore scores every lore entry, fact and note against each query and
 // tokenized each one twice per query (once for the IDF, once to score it):
@@ -39,7 +39,7 @@ export function tokenize(text: string, language: TableLanguage): string[] {
   if (known) {
     return [...known];
   }
-  const terms = stems(text, language).filter((term) => term.length > 2);
+  const terms = stems(text, language).filter(isSearchTerm);
   if (tokenMemoChars + key.length > TOKEN_MEMO_CHARS) {
     tokenMemo.clear();
     tokenMemoChars = 0;

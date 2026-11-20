@@ -8,6 +8,7 @@ import { RAGING } from "@/lib/srd/class-resources";
 import { conditionGrantedImmunity } from "@/lib/srd/condition-effect-queries";
 import { isWorn, matchArmor, type SrdArmor } from "@/lib/srd/armor";
 import { hasItemTag, type TaggedItem } from "@/lib/srd/item-tags";
+import { translate, type Locale } from "@/lib/i18n/translate";
 
 function has(conditions: string[], names: string[]): string | null {
   const lowered = conditions.map((entry) => entry.toLowerCase());
@@ -39,12 +40,13 @@ export const DAMAGE_TYPE_WORDS_FR: Record<string, string> = {
   thunder: "Tonnerre",
 };
 
-export type DamageLocale = "en" | "fr";
+export type DamageLocale = Locale;
 
 // A damage type as a word on screen ("Slashing", « Tranchants »): the French
 // SRD's own capitalized list heading; a type the maps do not carry stays as
 // it was spelled in.
 export function damageTypeWord(type: string, locale: DamageLocale): string {
+  if (locale === "zh-CN") return translate(locale, type);
   if (locale !== "fr") {
     return type;
   }
@@ -60,10 +62,7 @@ const DAMAGE_TYPE_WORD_RE =
   /\b(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)\b/g;
 
 export function damageWords(damage: string, locale: DamageLocale): string {
-  if (locale !== "fr") {
-    return damage;
-  }
-  return damage.replace(DAMAGE_TYPE_WORD_RE, (word) => (DAMAGE_TYPE_WORDS_FR[word] ?? word).toLowerCase());
+  return locale === "en" ? damage : damage.replace(DAMAGE_TYPE_WORD_RE, (word) => damageTypeWord(word, locale).toLowerCase());
 }
 
 const wholeWord = (text: string, word: string) =>

@@ -25,6 +25,8 @@ const WORD = new RegExp(`${SIGN}[${WORD_CHAR}]+(?:['’_-][${WORD_CHAR}]+)*`, "g
 const KEY_PART = new RegExp(`${SIGN}[${WORD_CHAR}]+`, "gu");
 const SPLIT = new RegExp(`(${WORD.source})`, "u");
 const WORD_CHARACTER = new RegExp(`[${WORD_CHAR}]`, "u");
+const HAN = /\p{Script=Han}/u;
+let chineseSegmenter: Intl.Segmenter | undefined;
 
 // One Unicode form, compatibility forms included (the ligature "ﬁ" is "fi", a
 // fullwidth "Ａ" is "A"), every apostrophe straight (the typographic ones, the
@@ -40,6 +42,22 @@ function straight(text: string): string {
 // written.
 export function words(text: string): string[] {
   return straight(text).match(WORD) ?? [];
+}
+
+// Chinese usually has no spaces between words. Use its dictionary
+// boundaries while preserving the normal token rules for Latin names.
+export function chineseWords(text: string): string[] {
+  return words(text).flatMap((word) => {
+    if (!HAN.test(word)) return [word];
+    chineseSegmenter ??= new Intl.Segmenter("zh-CN", { granularity: "word" });
+    return Array.from(chineseSegmenter.segment(word))
+      .filter((part) => part.isWordLike)
+      .map((part) => part.segment);
+  });
+}
+
+export function isSearchTerm(word: string): boolean {
+  return word.length >= 3 || /^\p{Script=Han}{2}$/u.test(word);
 }
 
 // The text as written, cut at its words: the gaps at even indexes, the words
@@ -108,7 +126,7 @@ export function phraseOffsets(text: string, phrase: string): number[] {
   for (let at = key.indexOf(wanted); at >= 0; at = key.indexOf(wanted, at + 1)) {
     const before = at === 0 ? "" : key[at - 1];
     const after = key[at + wanted.length] ?? "";
-    if (!WORD_CHARACTER.test(before) && !WORD_CHARACTER.test(after)) {
+    if ((!WORD_CHARACTER.test(before) || HAN.test(before)) && (!WORD_CHARACTER.test(after) || HAN.test(after))) {
       found.push(at);
     }
   }
@@ -127,7 +145,12 @@ export function namesPattern(names: Iterable<string>, flags: string): RegExp {
   const spellings = [...new Set([...names].flatMap((name) => [name.normalize("NFC"), name.normalize("NFD")]))]
     .sort((a, b) => b.length - a.length)
     .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  return new RegExp(`(?<![${WORD_CHAR}])(?:${spellings.join("|")})(?![${WORD_CHAR}])`, flags);
+  // A Chinese name can touch an ordinary word on either side. These
+  // are prose mentions; identity lookups keep demanding the full key.
+  return new RegExp(
+    `(?:(?<![${WORD_CHAR}])|(?<=${HAN.source}))(?:${spellings.join("|")})(?:(?![${WORD_CHAR}])|(?=${HAN.source}))`,
+    flags,
+  );
 }
 
 // The words a text writes in lower case somewhere: common words ("old",
@@ -150,9 +173,9 @@ export function commonWords(texts: readonly string[]): Set<string> {
 // stopWordsFor, passed in so a browser module never loads the stemmers). In
 // order, repeats kept.
 export function searchWords(text: string, stopWords: ReadonlySet<string>): string[] {
-  return textKey(text)
-    .split(" ")
-    .filter((word) => word.length >= 3 && !stopWords.has(word));
+  const key = textKey(text);
+  const terms = HAN.test(key) ? chineseWords(key) : key.split(" ");
+  return terms.filter((word) => isSearchTerm(word) && !stopWords.has(word));
 }
 
 // A name made into an id or a file name: its key's words joined by "_", a
@@ -268,5 +291,5 @@ export function unquoted(text: string): string {
 // line adds its own (issue 644).
 export function asSentence(text: string): string {
   const clause = text.trim();
-  return /[.!?…]["”’)]?$/u.test(clause) ? clause : `${clause}.`;
+  return /[.!?…。！？]["”’」』)]?$/u.test(clause) ? clause : `${clause}.`;
 }

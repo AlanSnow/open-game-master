@@ -1,0 +1,1825 @@
+diff --git a/src/renderer/app.ts b/src/renderer/app.ts
+index bb8fcfc..6eb07e1 100644
+--- a/src/renderer/app.ts
++++ b/src/renderer/app.ts
+@@ -11,7 +11,8 @@ import {
+   showUpdatePopup,
+   updateNoteFor,
+ } from "./chrome.js";
+-import { closeDrawer, createDrawer, isDrawerOpen, toggleDrawer } from "./drawer.js";
++import { closeDrawer, createDrawer, isDrawerOpen, renderDrawer, toggleDrawer } from "./drawer.js";
++import { shellUsesChinese } from "./shell-language.js";
+ import { bootTheme } from "../shared/theme-boot.js";
+ import { startGamepad } from "./gamepad.js";
+ import { showShellToast } from "./toast.js";
+@@ -27,6 +28,7 @@ import { endTour, isTourActive, maybeStartAppTour } from "./tour.js";
+
+ const { drawer, scrim } = createDrawer();
+ mountShell(drawer, scrim);
++if (shellUsesChinese()) document.documentElement.lang = "zh-CN";
+
+ function goHome(): void {
+   void refresh().then(() => renderHome());
+@@ -242,6 +244,18 @@ new MutationObserver(() => {
+   void window.odm.setTheme?.(mode);
+ }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
++// The language picker updates <html lang> through the game bundle. Repaint
++// the shell when the displayed language changes, preserving the open game.
++let shellChinese = shellUsesChinese();
++new MutationObserver(() => {
++  const chinese = shellUsesChinese();
++  if (chinese === shellChinese) return;
++  shellChinese = chinese;
++  if (state.overlayName === "settings" || state.screenName === "settings") renderSettings();
++  else rerenderHome();
++  renderDrawer();
++}).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
++
+ // The saved visual theme and brightness, laid now so the home, the drawer
+ // and Settings open in them; the game screens' applyTheme (theme-mode.ts)
+ // lays the same two, plus the theme's artwork, once their bundle runs.
+diff --git a/src/renderer/chrome.ts b/src/renderer/chrome.ts
+index b8422c2..4704b06 100644
+--- a/src/renderer/chrome.ts
++++ b/src/renderer/chrome.ts
+@@ -1,6 +1,7 @@
+ // The frame around every screen: the topbar with its hamburger and brand,
+ // the page column screens render into, the back link, intro block and form
+ // card, the invite banner, and the footer with the updater controls.
++import { shellText } from "./shell-language.js";
+ import type { UpdateStatus } from "../shared/types";
+ import { brandMark, button, chip, el, icon, iconButton, spinner } from "./dom.js";
+ import { renderDrawer, toggleDrawer } from "./drawer.js";
+@@ -69,9 +70,9 @@ export function applyDeckLayout(): void {
+     padHints.setAttribute("aria-hidden", "true");
+     padHints.append(
+       padHint("A", "Select"),
+-      padHint("B", "Back"),
+-      padHint(icon("menu"), "Menu"),
+-      padHint(icon("view"), "Settings"),
++      padHint("B", shellText("Back")),
++      padHint(icon("menu"), shellText("Menu")),
++      padHint(icon("view"), shellText("Settings")),
+     );
+     document.body.append(padHints);
+   }
+@@ -93,28 +94,28 @@ export function topbar(): HTMLElement {
+   brand.type = "button";
+   brand.dataset.tour = "brand";
+   brand.append(brandMark(), el("span", "wordmark", "Open Game Master"));
+-  brand.setAttribute("aria-label", atHome ? "Open Game Master" : "Back home");
++  brand.setAttribute("aria-label", atHome ? "Open Game Master" : shellText("Back home"));
+   if (!atHome) {
+     brand.addEventListener("click", goHome);
+-    brand.title = "Back home";
++    brand.title = shellText("Back home");
+   }
+   bar.append(brand);
+   const tools = el("div", "meta tools");
+   tools.dataset.tour = "topbar-tools";
+-  if (!atHome) tools.append(iconButton("home", "Home", goHome));
++  if (!atHome) tools.append(iconButton("home", shellText("Home"), goHome));
+   // Inside a world the guide and Settings open over it and their buttons
+   // close them again; elsewhere they are screens of their own.
+   const helpOpen = state.overlayName === "help";
+   const settingsOpen = state.overlayName === "settings";
+   if (state.screenName !== "help") {
+-    const help = iconButton("help", helpOpen ? "Close the guide" : "User guide", () =>
++    const help = iconButton("help", helpOpen ? shellText("Close the guide") : shellText("User guide"), () =>
+       helpOpen ? closeOverlay() : renderHelp(),
+     );
+     help.classList.toggle("active", helpOpen);
+     tools.append(help);
+   }
+   if (state.screenName !== "settings") {
+-    const gear = iconButton("gear", settingsOpen ? "Close settings" : "Settings", () =>
++    const gear = iconButton("gear", settingsOpen ? shellText("Close settings") : shellText("Settings"), () =>
+       settingsOpen ? closeOverlay() : renderSettings(),
+     );
+     gear.classList.toggle("active", settingsOpen);
+@@ -126,8 +127,8 @@ export function topbar(): HTMLElement {
+   const menu = el("button", "tt-medallion hamburger");
+   menu.type = "button";
+   menu.dataset.tour = "topbar-menu";
+-  menu.title = "Menu";
+-  menu.setAttribute("aria-label", "Menu");
++  menu.title = shellText("Menu");
++  menu.setAttribute("aria-label", shellText("Menu"));
+   const name = state.local.state === "unavailable" ? "" : state.local.username;
+   if (name) menu.append(el("span", "initial", name.slice(0, 1).toUpperCase()));
+   else menu.append(icon("menu"));
+@@ -155,7 +156,7 @@ export function showOverlay(name: "settings" | "help", ...nodes: (HTMLElement |
+   previous?.remove();
+   const sheet = el("div", `overlay ${name}`);
+   sheet.setAttribute("role", "dialog");
+-  sheet.setAttribute("aria-label", name === "settings" ? "Settings" : "User guide");
++  sheet.setAttribute("aria-label", name === "settings" ? shellText("Settings") : shellText("User guide"));
+   const panel = el("section", "screen mid overlay-panel");
+   panel.append(...nodes.filter((node): node is HTMLElement => node !== null));
+   sheet.append(panel);
+@@ -261,7 +262,7 @@ export function joinBanner(): HTMLElement | null {
+   } else {
+     // A scanned server address: there is no room to join, only a server to
+     // add, and the form below already holds its address.
+-    grow.append(el("div", "detail", "Adding a server"), el("div", "", intent.origin));
++    grow.append(el("div", "detail", shellText("Adding a server")), el("div", "", intent.origin));
+   }
+   banner.append(grow);
+   return banner;
+@@ -427,8 +428,8 @@ export function repaintUpdatePopup(): void {
+ export function legalLinks(): HTMLElement[] {
+   const links: HTMLElement[] = [];
+   for (const [label, href] of [
+-    ["Privacy policy", "https://opengamemaster.com/privacy/"],
+-    ["Terms of service", "https://opengamemaster.com/terms/"],
++    [shellText("Privacy policy"), "https://opengamemaster.com/privacy/"],
++    [shellText("Terms of service"), "https://opengamemaster.com/terms/"],
+     ["GitHub", "https://github.com/Lebbitheplow/open-game-master"],
+   ] as const) {
+     const link = el("a", "foot-link", label);
+diff --git a/src/renderer/drawer.ts b/src/renderer/drawer.ts
+index c877933..9fbadf1 100644
+--- a/src/renderer/drawer.ts
++++ b/src/renderer/drawer.ts
+@@ -2,6 +2,7 @@
+ // left rail from 1100 px up (the CSS decides which; this file only fills
+ // it and tracks open or closed). It holds the profile, the Hosts list that
+ // replaced the old server-list screen, and the doors to everything else.
++import { shellText } from "./shell-language.js";
+ import { el, icon, iconButton, statusDot } from "./dom.js";
+ import { hostStatusLabel, relativeTime } from "../shared/home-view-logic.js";
+ import { renderHelp } from "./help.js";
+@@ -71,9 +72,9 @@ function profile(): HTMLElement {
+   wrap.append(el("span", "avatar", (name || "?").slice(0, 1).toUpperCase()));
+   const text = el("div", "grow");
+   if (state.local.state === "unavailable") {
+-    text.append(el("div", "name", "No device world"), el("div", "detail", "Connect to a server to play"));
++    text.append(el("div", "name", shellText("No device world")), el("div", "detail", shellText("Connect to a server to play")));
+   } else {
+-    text.append(el("div", "name", name || "Adventurer"), el("div", "detail", "On this device"));
++    text.append(el("div", "name", name || "Adventurer"), el("div", "detail", shellText("On this device")));
+   }
+   wrap.append(text);
+   return wrap;
+@@ -144,16 +145,16 @@ function serverRow(server: ServerSummary): HTMLElement {
+   );
+   remove.disabled = !server.hasToken;
+   row.append(remove);
+-  row.append(iconButton("close", "Forget this server", () => void forgetServer(server), "forget"));
++  row.append(iconButton("close", shellText("Forget this server"), () => void forgetServer(server), "forget"));
+   return row;
+ }
+
+ function hosts(): HTMLElement {
+   const wrap = el("div", "drawer-hosts");
+   wrap.dataset.tour = "hosts";
+-  wrap.append(el("div", "drawer-eyebrow", "Hosts"));
++  wrap.append(el("div", "drawer-eyebrow", shellText("Hosts")));
+   if (state.local.state !== "unavailable") {
+-    const detail = state.local.username || (state.local.firstRun ? "Not started yet" : "");
++    const detail = state.local.username || (state.local.firstRun ? shellText("Not started yet") : "");
+     wrap.append(
+       // The world's home is the app's: tapping it makes it the host the
+       // title screen's menu opens on, and wakes it.
+@@ -175,7 +176,7 @@ function hosts(): HTMLElement {
+ function legal(): HTMLElement {
+   const wrap = el("div", "drawer-legal");
+   for (const [label, href] of [
+-    ["Privacy policy", "https://opengamemaster.com/privacy/"],
++    [shellText("Privacy policy"), "https://opengamemaster.com/privacy/"],
+     ["Terms", "https://opengamemaster.com/terms/"],
+   ] as const) {
+     const link = el("a", "", label);
+@@ -191,22 +192,22 @@ export function renderDrawer(): void {
+   const items: HTMLElement[] = [profile(), hosts()];
+   const nav = el("nav", "drawer-nav");
+   nav.append(
+-    navItem("plus", "Add a server", () => renderAdd(state.joinIntent?.origin ?? ""), "add-server"),
++    navItem("plus", shellText("Add a server"), () => renderAdd(state.joinIntent?.origin ?? ""), "add-server"),
+   );
+   nav.append(
+     window.odm.scanInvite
+       ? navItem("qr", "Scan / paste invite", (btn) => void scanInvite(btn), "invite")
+-      : navItem("link", "Paste invite or code", () => renderAdd(state.joinIntent?.origin ?? ""), "invite"),
++      : navItem("link", shellText("Paste invite or code"), () => renderAdd(state.joinIntent?.origin ?? ""), "invite"),
+   );
+   // Story AI is chosen on the world's first run; the door only makes sense
+   // once that world exists.
+   if (state.local.state !== "unavailable" && !state.local.firstRun) {
+-    nav.append(navItem("sparkles", "Story AI", () => renderLocalAi(true), "drawer-story-ai"));
++    nav.append(navItem("sparkles", shellText("Story AI"), () => renderLocalAi(true), "drawer-story-ai"));
+   }
+   // Settings and the guide sit in the topbar of every screen too; here
+   // they keep the menu complete for anyone who looks for them in it.
+-  nav.append(navItem("gear", "Settings", () => renderSettings(), "drawer-settings"));
+-  nav.append(navItem("help", "Help & guide", () => renderHelp(), "drawer-help"));
++  nav.append(navItem("gear", shellText("Settings"), () => renderSettings(), "drawer-settings"));
++  nav.append(navItem("help", shellText("Help & guide"), () => renderHelp(), "drawer-help"));
+   items.push(nav, legal());
+   drawer.replaceChildren(...items);
+ }
+diff --git a/src/renderer/game-screen.ts b/src/renderer/game-screen.ts
+index 6aecfe5..43df0cc 100644
+--- a/src/renderer/game-screen.ts
++++ b/src/renderer/game-screen.ts
+@@ -33,6 +33,7 @@ interface GameMount {
+ interface GameModule {
+   mountDeviceSettings(root: HTMLElement): () => void;
+   mountAppearance?(root: HTMLElement): () => void;
++  mountLanguage(root: HTMLElement): () => void;
+   // Fetches the page module for a host path ahead of its first render.
+   prefetch?(path: string): void;
+   mountGame(
+@@ -132,6 +133,12 @@ export async function mountAppearance(root: HTMLElement): Promise<() => void> {
+   return game.mountAppearance(root);
+ }
+
++export async function mountLanguage(root: HTMLElement): Promise<() => void> {
++  const game = await loadBundle();
++  root.replaceChildren();
++  return game.mountLanguage(root);
++}
++
+ // The shell's back gesture inside a world: the previous page, or false at
+ // the world's first page so the caller can leave for home.
+ export function gameBack(): boolean {
+diff --git a/src/renderer/game/host-pages.d.ts b/src/renderer/game/host-pages.d.ts
+index 1142b89..8948183 100644
+--- a/src/renderer/game/host-pages.d.ts
++++ b/src/renderer/game/host-pages.d.ts
+@@ -50,14 +50,20 @@ declare module "@/lib/theme-mode" {
+ // its root layout; the game root applies the device's choice here when the
+ // screens load.
+ declare module "@/lib/locale" {
+-  export type LocaleChoice = "auto" | "en" | "fr";
++  export type LocaleChoice = "auto" | "en" | "fr" | "zh-CN";
+   export function applyLocale(): void;
+   export function readLocaleChoice(): LocaleChoice;
+-  export function resolveLocale(choice: LocaleChoice): "en" | "fr";
++  export function resolveLocale(choice: LocaleChoice): "en" | "fr" | "zh-CN";
+ }
+
+ // The French catalog's loader (src/lib/i18n/catalog-loader.ts): the
+ // catalog is its own chunk, fetched when the reader's language needs it.
+ declare module "@/lib/i18n/catalog-loader" {
+-  export function loadCatalog(locale: "en" | "fr"): Promise<void>;
++  export function loadCatalog(locale: "en" | "fr" | "zh-CN"): Promise<void>;
++}
++
++// The language picker lives in the game bundle but is also mounted in the launcher.
++declare module "@/app/settings/LanguageSection" {
++  import type { ComponentType } from "preact/compat";
++  export const LanguageSection: ComponentType<Record<string, never>>;
+ }
+diff --git a/src/renderer/game/index.tsx b/src/renderer/game/index.tsx
+index 932dec7..0822631 100644
+--- a/src/renderer/game/index.tsx
++++ b/src/renderer/game/index.tsx
+@@ -9,6 +9,7 @@ import { Component, Suspense, lazy, useEffect, useMemo, type ComponentType, type
+ import { render } from "preact";
+ import { DeviceSettings } from "@/components/DeviceSettings";
+ import { AppearancePicker } from "@/components/AppearancePicker";
++import { LanguageSection } from "@/app/settings/LanguageSection";
+ import { ConfirmHost } from "@/components/ui/ConfirmDialog";
+ import { PageSkeleton, type SkeletonKind } from "@/components/PageSkeleton";
+ import { HostClient, type HostSession } from "../api/host.js";
+@@ -342,15 +343,22 @@ export function mountAppearance(root: HTMLElement): () => void {
+   return () => render(null, root);
+ }
+
++export function mountLanguage(root: HTMLElement): () => void {
++  installLocalAssets();
++  render(<LanguageSection />, root);
++  return () => render(null, root);
++}
++
+ declare global {
+   interface Window {
+     odmGame?: {
+       mountGame: typeof mountGame;
+       mountDeviceSettings: typeof mountDeviceSettings;
+       mountAppearance: typeof mountAppearance;
++      mountLanguage: typeof mountLanguage;
+       prefetch: typeof prefetch;
+     };
+   }
+ }
+
+-window.odmGame = { mountGame, mountDeviceSettings, mountAppearance, prefetch };
++window.odmGame = { mountGame, mountDeviceSettings, mountAppearance, mountLanguage, prefetch };
+diff --git a/src/renderer/harness-ai.ts b/src/renderer/harness-ai.ts
+index 14df1a4..dbcbf8c 100644
+--- a/src/renderer/harness-ai.ts
++++ b/src/renderer/harness-ai.ts
+@@ -4,6 +4,7 @@
+ // player picks one and a model. Nothing is looked for or stored by the shell
+ // itself: the server is what will start the program, so its answer is the
+ // only one that counts, and no vendor password or key is ever asked for.
++import { shellText } from "./shell-language.js";
+ import { backLink, formCard, intro, loadingScreen, show } from "./chrome.js";
+ import { button, chip, copyText, el } from "./dom.js";
+ import { renderError } from "./servers.js";
+@@ -21,9 +22,9 @@ function copyLine(text: string): HTMLElement {
+   const row = el("div", "status-line");
+   const code = el("code", "", text);
+   code.style.userSelect = "all";
+-  const copy = button("quiet", "Copy", (btn) => {
++  const copy = button("quiet", shellText("Copy"), (btn) => {
+     void copyText(text).then((ok) => {
+-      btn.textContent = ok ? "Copied" : "Copy";
++      btn.textContent = ok ? shellText("Copied") : shellText("Copy");
+     });
+   });
+   row.append(code, copy);
+@@ -32,7 +33,7 @@ function copyLine(text: string): HTMLElement {
+
+ export function renderHarnessPicker(finish: Finish, back: Back, refresh = false): void {
+   state.screenName = "local-ai-harness";
+-  show("narrow", loadingScreen("Looking for your agents", "Checking which agent programs this computer has..."));
++  show("narrow", loadingScreen(shellText("Looking for your agents"), shellText("Checking which agent programs this computer has...")));
+   void window.odm
+     .localHarnessStatus(refresh)
+     .catch((err: unknown): HarnessStatusResult => ({ ok: false, error: String(err) }))
+@@ -54,7 +55,7 @@ function drawPicker(
+ ): void {
+   const choices = el("div", "choices");
+   choices.setAttribute("role", "radiogroup");
+-  choices.setAttribute("aria-label", "Agent program");
++  choices.setAttribute("aria-label", shellText("Agent program"));
+   for (const card of statuses) {
+     const tag = harnessTag(card);
+     const btn = el("button", "panel ornate choice");
+@@ -77,13 +78,13 @@ function drawPicker(
+   }
+   show(
+     "mid",
+-    backLink("Story AI", back),
++    backLink(shellText("Story AI"), back),
+     intro(
+-      "Use an agent you already have",
+-      "Claude Code, Codex, opencode, Grok Build, Pi or the Antigravity CLI tells the story on its own sign-in. It gets none of its own tools: only the table's rules, turn by turn, the same as the built-in storyteller.",
++      shellText("Use an agent you already have"),
++      shellText("Claude Code, Codex, opencode, Grok Build, Pi or the Antigravity CLI tells the story on its own sign-in. It gets none of its own tools: only the table's rules, turn by turn, the same as the built-in storyteller."),
+     ),
+     choices,
+-    button("quiet", "Check again", () => renderHarnessPicker(finish, back, true), "refresh"),
++    button("quiet", shellText("Check again"), () => renderHarnessPicker(finish, back, true), "refresh"),
+   );
+ }
+
+@@ -96,7 +97,7 @@ function drawDetail(
+ ): void {
+   state.screenName = "local-ai-harness-detail";
+   const again = () => renderHarnessPicker(finish, back, true);
+-  const backToList = backLink("Agents", () => drawPicker(statuses, current, finish, back));
++  const backToList = backLink(shellText("Agents"), () => drawPicker(statuses, current, finish, back));
+   const step = harnessStep(card);
+   if (step === "unavailable") {
+     show("narrow", backToList, intro(card.label, ""), formCard(el("p", "error", card.message ?? "Not available here.")));
+@@ -115,7 +116,7 @@ function drawDetail(
+         el("p", "error", card.message ?? ""),
+         el("p", "hint", `Fix it in a terminal on this computer, then check again. ${card.label}'s install command:`),
+         copyLine(card.installHint ?? ""),
+-        button("primary", "Check again", again, "refresh"),
++        button("primary", shellText("Check again"), again, "refresh"),
+       ),
+     );
+     return;
+@@ -131,7 +132,7 @@ function drawDetail(
+       ),
+       card.installed ? null : copyLine(card.installHint ?? ""),
+       copyLine(card.signInHint ?? ""),
+-      button("primary", "Check again", again, "refresh"),
++      button("primary", shellText("Check again"), again, "refresh"),
+     );
+     show("narrow", backToList, intro(card.label, ""), steps);
+     return;
+@@ -142,7 +143,7 @@ function drawDetail(
+   const pick = (labelText: string, value: string, preferCheap: boolean) => {
+     const wrap = el("label", "", labelText);
+     const select = el("select");
+-    const first = el("option", "", preferCheap ? "Same as the story model" : "The program's own default");
++    const first = el("option", "", preferCheap ? shellText("Same as the story model") : shellText("The program's own default"));
+     first.value = "";
+     select.append(first);
+     const ordered = preferCheap
+@@ -163,7 +164,7 @@ function drawDetail(
+     return { wrap, select };
+   };
+   const same = current.id === card.id;
+-  const story = pick("Story model", same ? current.model : "", false);
++  const story = pick(shellText("Story model"), same ? current.model : "", false);
+   const utility = pick("Bookkeeping model (summaries, Ask)", same ? current.utilityModel : "", true);
+   // Fast where the program runs the chosen model at it: Claude Code and
+   // Codex each say so per model in the list the server probed.
+@@ -183,7 +184,7 @@ function drawDetail(
+       ? `Every campaign on this computer has it tell the story from now on, on its own sign-in and plan. ${card.label} can paint too: the next screen offers it, after one test map.`
+       : "Every campaign on this computer has it tell the story from now on, on its own sign-in and plan. Pictures stay as they are: a local image AI keeps painting, and otherwise the tables use their painted placeholders.",
+   );
+-  const submit = button("primary", "Save and play", undefined, "play");
++  const submit = button("primary", shellText("Save and play"), undefined, "play");
+   submit.type = "submit";
+   submit.classList.add("block");
+   const tuning = el("details", "tuning");
+diff --git a/src/renderer/home.ts b/src/renderer/home.ts
+index e21a1c8..db15ad0 100644
+--- a/src/renderer/home.ts
++++ b/src/renderer/home.ts
+@@ -8,6 +8,7 @@
+ // the saved servers, friends' apps reached through a tunnel. Decisions
+ // about what to show come from src/shared/home-view-logic.ts; this file
+ // only draws them.
++import { shellText } from "./shell-language.js";
+ import {
+   buildGroups,
+   canDeleteFromHome,
+@@ -87,7 +88,7 @@ function hostOf(origin: string): string {
+ }
+
+ function hostName(host: HomeHost): string {
+-  if (host.kind === "local") return DEVICE;
++  if (host.kind === "local") return shellText(DEVICE);
+   return host.name || hostOf(host.origin);
+ }
+
+@@ -314,7 +315,7 @@ function ghostButton(label: string, onClick: (btn: HTMLButtonElement) => void, l
+ function sourceLine(host: HomeHost): HTMLElement {
+   const line = el("span", "tt-source");
+   line.append(icon(hostIcon(host)), document.createTextNode(hostName(host)), statusDot(host.status));
+-  line.title = host.kind === "local" ? "Hosted on this device" : host.origin;
++  line.title = host.kind === "local" ? shellText("Hosted on this device") : host.origin;
+   return line;
+ }
+
+@@ -385,10 +386,10 @@ function localBlock(host: HomeHost | null): HTMLElement {
+   if (local.state === "error") {
+     block.append(reveal(eyebrow("The road is dark"), 140), reveal(goldTitle(DEVICE, true), 220));
+     block.append(reveal(el("p", "tt-lede", local.error || "The offline world could not start."), 420));
+-    actions.append(enterButton("Try again", (btn) => void playLocal(btn), "refresh"));
+-    if (window.odm.localRepair) actions.append(ghostButton("Repair", (btn) => void repairLocal(btn), "refresh"));
++    actions.append(enterButton(shellText("Try again"), (btn) => void playLocal(btn), "refresh"));
++    if (window.odm.localRepair) actions.append(ghostButton(shellText("Repair"), (btn) => void repairLocal(btn), "refresh"));
+   } else if (local.firstRun) {
+-    block.append(reveal(eyebrow("Your first tale"), 140), reveal(goldTitle("Begin your world", true), 220));
++    block.append(reveal(eyebrow(shellText("Your first tale")), 140), reveal(goldTitle(shellText("Begin your world"), true), 220));
+     block.append(
+       reveal(
+         el(
+@@ -399,29 +400,29 @@ function localBlock(host: HomeHost | null): HTMLElement {
+         420,
+       ),
+     );
+-    if (local.state === "starting") actions.append(spinner(), badge("Starting"));
+-    else actions.append(enterButton("Start playing", (btn) => void playLocal(btn)));
++    if (local.state === "starting") actions.append(spinner(), badge(shellText("Starting")));
++    else actions.append(enterButton(shellText("Start playing"), (btn) => void playLocal(btn)));
+   } else if (host?.lastSeenAt && host.campaigns.length === 0) {
+     // Known to be empty: the same words the world's home says.
+-    block.append(reveal(eyebrow("Your first tale"), 140), reveal(goldTitle("Every campaign starts with an empty table.", true), 220));
++    block.append(reveal(eyebrow(shellText("Your first tale")), 140), reveal(goldTitle(shellText("Every campaign starts with an empty table."), true), 220));
+     block.append(reveal(el("p", "tt-lede", "Create one and invite your friends, or join theirs with a room code below."), 420));
+-    if (local.state === "starting") actions.append(spinner(), badge("Starting"));
+-    else actions.append(enterButton("Forge a new world", (btn) => void playLocal(btn, "/?new=1")));
++    if (local.state === "starting") actions.append(spinner(), badge(shellText("Starting")));
++    else actions.append(enterButton(shellText("Forge a new world"), (btn) => void playLocal(btn, "/?new=1")));
+   } else {
+     block.append(reveal(eyebrow(`Your world on this ${device}`), 140), reveal(goldTitle(DEVICE, true), 220));
+     const who = el("p", "tt-lede");
+     if (local.username) {
+       who.append(document.createTextNode("Playing as "), el("strong", "", local.username), document.createTextNode("."));
+     } else {
+-      who.textContent = "Offline world ready.";
++      who.textContent = shellText("Offline world ready.");
+     }
+     block.append(reveal(who, 420));
+-    if (local.state === "starting") actions.append(spinner(), badge("Starting"));
++    if (local.state === "starting") actions.append(spinner(), badge(shellText("Starting")));
+     // Awake without a profile here (portal mode starts the world to serve a
+     // friend's table, or the sign-in lapsed): the shell's own name or
+     // sign-in screen comes first, as it always did.
+-    else if (!local.hasAccount) actions.append(enterButton("Start playing", (btn) => void playLocal(btn)));
+-    else actions.append(enterButton("Forge a new world", (btn) => void playLocal(btn, "/?new=1")));
++    else if (!local.hasAccount) actions.append(enterButton(shellText("Start playing"), (btn) => void playLocal(btn)));
++    else actions.append(enterButton(shellText("Forge a new world"), (btn) => void playLocal(btn, "/?new=1")));
+   }
+   block.append(reveal(actions, 640));
+   return block;
+@@ -438,7 +439,7 @@ function serverBlock(server: ServerSummary): HTMLElement {
+     reveal(chapter(hostOf(server.origin)), 420),
+   );
+   const actions = el("div", "tt-actions");
+-  actions.append(enterButton("Enter", (btn) => void connectServer(server, btn)));
++  actions.append(enterButton(shellText("Enter"), (btn) => void connectServer(server, btn)));
+   block.append(reveal(actions, 640));
+   return block;
+ }
+@@ -447,8 +448,8 @@ function welcomeBlock(): HTMLElement {
+   const block = el("div", "tt-title-block");
+   block.dataset.tour = "hero";
+   block.append(
+-    reveal(eyebrow("Gather your party"), 140),
+-    reveal(goldTitle("Every adventure starts with a table.", true), 220),
++    reveal(eyebrow(shellText("Gather your party")), 140),
++    reveal(goldTitle(shellText("Every adventure starts with a table."), true), 220),
+     reveal(
+       el(
+         "p",
+@@ -461,9 +462,9 @@ function welcomeBlock(): HTMLElement {
+     ),
+   );
+   const actions = el("div", "tt-actions");
+-  actions.append(enterButton("Add a server", () => renderAdd(state.joinIntent?.origin ?? ""), "plus"));
+-  if (window.odm.scanInvite) actions.append(ghostButton("Scan invite", (btn) => void scanInvite(btn), "qr"));
+-  else actions.append(ghostButton("Paste invite", () => renderAdd(state.joinIntent?.origin ?? ""), "link"));
++  actions.append(enterButton(shellText("Add a server"), () => renderAdd(state.joinIntent?.origin ?? ""), "plus"));
++  if (window.odm.scanInvite) actions.append(ghostButton(shellText("Scan invite"), (btn) => void scanInvite(btn), "qr"));
++  else actions.append(ghostButton(shellText("Paste invite"), () => renderAdd(state.joinIntent?.origin ?? ""), "link"));
+   block.append(reveal(actions, 640));
+   return block;
+ }
+@@ -497,7 +498,7 @@ function hostLine(primary: HomeHost, feed: HomeFeed): HTMLElement {
+   line.append(icon(hostIcon(primary)), el("span", "tt-menu-host-text", `Opens on ${hostName(primary)}`));
+   const next = nextCreationHost(feed, primary);
+   if (next) {
+-    const change = el("button", "tt-menu-host-change", "Change");
++    const change = el("button", "tt-menu-host-change", shellText("Change"));
+     change.type = "button";
+     change.title = `Open new tables, characters and workshops on ${hostName(next)} instead`;
+     change.addEventListener("click", () => {
+@@ -515,7 +516,7 @@ function hostLine(primary: HomeHost, feed: HomeFeed): HTMLElement {
+ // for its first run); the shell's own doors follow.
+ function menu(primary: HomeHost | null, feed: HomeFeed, focusJoin: () => void): HTMLElement {
+   const nav = el("nav", "tt-menu");
+-  nav.setAttribute("aria-label", "Main menu");
++  nav.setAttribute("aria-label", shellText("Main menu"));
+   const items: MenuItem[] = [];
+   const opensHere = Boolean(primary && !(primary.kind === "local" && state.local.firstRun));
+   if (primary && opensHere) nav.append(reveal(hostLine(primary, feed), 760));
+@@ -526,14 +527,14 @@ function menu(primary: HomeHost | null, feed: HomeFeed, focusJoin: () => void):
+       // Quick start is an AI-run adventure: offered, as on the website, only
+       // where the host has an AI storyteller to run it.
+       if (primary.offersStory) {
+-        items.push({ label: "Quick start", glyph: "ui-quickstart", tour: "tile-quick-start", sub: STARTING_ROUTES.starter, onClick: (btn) => openHost(primary, "/?new=starter", btn) });
++        items.push({ label: shellText("Quick start"), glyph: "ui-quickstart", tour: "tile-quick-start", sub: STARTING_ROUTES.starter, onClick: (btn) => openHost(primary, "/?new=starter", btn) });
+       }
+-      items.push({ label: "New campaign", glyph: "ui-new", tour: "tile-new-campaign", sub: STARTING_ROUTES.new, onClick: (btn) => openHost(primary, "/?new=1", btn) });
++      items.push({ label: shellText("New campaign"), glyph: "ui-new", tour: "tile-new-campaign", sub: STARTING_ROUTES.new, onClick: (btn) => openHost(primary, "/?new=1", btn) });
+     }
+     items.push(
+-      { label: "Characters", glyph: "tab-characters", tour: "tile-characters", onClick: (btn) => openHost(primary, "/characters", btn) },
+-      { label: "Workshop", glyph: "system-homebrew", tour: "tile-workshop", onClick: (btn) => openHost(primary, "/workshop", btn) },
+-      { label: "Rulebook", glyph: "system-rules", tour: "tile-rulebook", onClick: (btn) => openHost(primary, "/rulebook", btn) },
++      { label: shellText("Characters"), glyph: "tab-characters", tour: "tile-characters", onClick: (btn) => openHost(primary, "/characters", btn) },
++      { label: shellText("Workshop"), glyph: "system-homebrew", tour: "tile-workshop", onClick: (btn) => openHost(primary, "/workshop", btn) },
++      { label: shellText("Rulebook"), glyph: "system-rules", tour: "tile-rulebook", onClick: (btn) => openHost(primary, "/rulebook", btn) },
+     );
+   }
+   // The ways into a game come first, each with its line; the places that
+@@ -542,14 +543,14 @@ function menu(primary: HomeHost | null, feed: HomeFeed, focusJoin: () => void):
+   const places = items.filter((item) => !item.sub);
+   const ways = items.filter((item) => item.sub);
+   items.length = 0;
+-  items.push(...ways, { label: "Join with a code", glyph: "ui-join", tour: "tile-join", sub: STARTING_ROUTES.join, onClick: focusJoin });
++  items.push(...ways, { label: shellText("Join with a code"), glyph: "ui-join", tour: "tile-join", sub: STARTING_ROUTES.join, onClick: focusJoin });
+   const waysCount = items.length;
+   items.push(...places);
+-  items.push({ label: "Add a server", glyph: "system-share", tour: "tile-add-server", onClick: () => renderAdd(state.joinIntent?.origin ?? "") });
++  items.push({ label: shellText("Add a server"), glyph: "system-share", tour: "tile-add-server", onClick: () => renderAdd(state.joinIntent?.origin ?? "") });
+   // Story AI is chosen on the world's first run; the door only makes sense
+   // once that world exists.
+   if (state.local.state !== "unavailable" && !state.local.firstRun) {
+-    items.push({ label: "Story AI", glyph: "ui-ai", tour: "tile-story-ai", onClick: () => renderLocalAi(true) });
++    items.push({ label: shellText("Story AI"), glyph: "ui-ai", tour: "tile-story-ai", onClick: () => renderLocalAi(true) });
+   }
+   const groups = el("div", "tt-menu-groups");
+   const waysGroup = el("div", "tt-menu-group");
+@@ -721,7 +722,7 @@ function forgeSlot(host: HomeHost): HTMLElement {
+   const plus = el("span", "tt-slot-new-plus");
+   plus.setAttribute("aria-hidden", "true");
+   plus.append(icon("plus"));
+-  btn.append(plus, el("span", "tt-slot-title", "Forge a new world"));
++  btn.append(plus, el("span", "tt-slot-title", shellText("Forge a new world")));
+   btn.addEventListener("click", () => openHost(host, "/?new=1", btn));
+   cell.append(btn);
+   return cell;
+@@ -739,7 +740,7 @@ function slotGroup(group: HostGroup, primary: HomeHost | null): HTMLElement | nu
+   head.append(status);
+   if (group.lastSeen) head.append(el("span", "tt-slot-host-seen", group.lastSeen));
+   if (host.status === "needsLogin") {
+-    head.append(ghostButton("Sign in", () => void signInTo(host.origin, host.username), "logIn"));
++    head.append(ghostButton(shellText("Sign in"), () => void signInTo(host.origin, host.username), "logIn"));
+   }
+   wrap.append(head);
+   const row = el("ul", "tt-slot-row");
+@@ -758,7 +759,7 @@ export function offlineToggle(rerender: () => void = renderHome): HTMLElement {
+   btn.setAttribute("aria-pressed", String(on));
+   const track = el("span", "track");
+   track.append(el("span", "knob"));
+-  btn.append(document.createTextNode("Hide offline"), track);
++  btn.append(document.createTextNode(shellText("Hide offline")), track);
+   btn.addEventListener("click", () => {
+     setHideOffline(!on);
+     rerender();
+@@ -767,7 +768,7 @@ export function offlineToggle(rerender: () => void = renderHome): HTMLElement {
+ }
+
+ function refreshButton(): HTMLElement {
+-  const btn = iconButton("refresh", "Refresh", () => {
++  const btn = iconButton("refresh", shellText("Refresh"), () => {
+     void refreshFeed().then(() => {
+       if (state.screenName === "home") renderHome();
+     });
+@@ -781,11 +782,11 @@ function refreshButton(): HTMLElement {
+ // is deleted, the same as on the website's home.
+ function slots(feed: HomeFeed, primary: HomeHost | null): HTMLElement {
+   const section = el("section", "tt-slots");
+-  section.setAttribute("aria-label", "Your tables");
++  section.setAttribute("aria-label", shellText("Your tables"));
+   const head = el("div", "tt-slots-head");
+   const groups = buildGroups(feed, { hideOffline: hideOffline(), deviceName: DEVICE, now: Date.now() });
+   const count = groups.reduce((total, group) => total + group.rows.length, 0);
+-  head.append(el("h2", "tt-slots-eyebrow", count === 1 ? "Your table" : "Your tables"));
++  head.append(el("h2", "tt-slots-eyebrow", count === 1 ? shellText("Your table") : shellText("Your tables")));
+   const controls = el("div", "tt-slots-controls");
+   controls.append(offlineToggle(), refreshButton());
+   head.append(controls);
+@@ -803,7 +804,7 @@ function slots(feed: HomeFeed, primary: HomeHost | null): HTMLElement {
+     if (!state.feed) empty.append(spinner(), document.createTextNode(" Looking for your tables..."));
+     else if (feed.hosts.length === 0) empty.textContent = "Add a server or begin your world, and your tables gather here.";
+     else if (groups.length === 0) empty.textContent = "Every remote host is offline right now. Turn off Hide offline to see them.";
+-    else empty.textContent = "No tables yet.";
++    else empty.textContent = shellText("No tables yet.");
+     section.append(empty);
+   }
+   if (feed.hosts.some((host) => host.kind === "tunnel" && host.status === "offline")) {
+@@ -836,7 +837,7 @@ function deviceBlock(localIsHero: boolean): HTMLElement | null {
+     local.state === "running"
+       ? local.serverVersion
+         ? `Your world is awake, server ${local.serverVersion}.`
+-        : "Your world is awake."
++        : shellText("Your world is awake.")
+       : local.state === "starting"
+         ? "Waking your world..."
+         : local.state === "error"
+@@ -846,10 +847,10 @@ function deviceBlock(localIsHero: boolean): HTMLElement | null {
+   head.append(text);
+   const actions = el("div", "tt-device-actions");
+   if (local.state !== "starting") {
+-    const storyAi = ghostButton("Story AI", () => renderLocalAi(true), "sparkles");
++    const storyAi = ghostButton(shellText("Story AI"), () => renderLocalAi(true), "sparkles");
+     storyAi.dataset.tour = "story-ai";
+     actions.append(storyAi);
+-    if (!localIsHero) actions.append(ghostButton("New campaign here", (btn) => void playLocal(btn, "/?new=1"), "plus"));
++    if (!localIsHero) actions.append(ghostButton(shellText("New campaign here"), (btn) => void playLocal(btn, "/?new=1"), "plus"));
+   }
+   head.append(actions);
+   panel.append(head);
+@@ -865,7 +866,7 @@ function joinPanel(): { panel: HTMLElement; focus: () => void } {
+   const panel = el("section", "tt-join tt-panel");
+   panel.id = "join";
+   panel.dataset.tour = "home-invite";
+-  panel.setAttribute("aria-label", "Join with a room code");
++  panel.setAttribute("aria-label", shellText("Join with a room code"));
+   panel.append(
+     ...brackets(),
+     el("h2", "tt-below-eyebrow", "Join by sigil"),
+@@ -873,7 +874,7 @@ function joinPanel(): { panel: HTMLElement; focus: () => void } {
+   );
+   const form = el("form", "tt-join-form");
+   const sigil = el("label", "tt-sigil");
+-  sigil.setAttribute("aria-label", "Room code");
++  sigil.setAttribute("aria-label", shellText("Room code"));
+   const field = el("input", "tt-sigil-input");
+   field.type = "text";
+   field.autocapitalize = "characters";
+@@ -908,10 +909,10 @@ function joinPanel(): { panel: HTMLElement; focus: () => void } {
+   paint();
+   sigil.append(field, boxes);
+   const error = el("p", "tt-error");
+-  const join = ghostButton("Join", () => form.requestSubmit());
++  const join = ghostButton(shellText("Join"), () => form.requestSubmit());
+   join.type = "submit";
+   form.append(sigil, join);
+-  if (window.odm.scanInvite) form.append(ghostButton("Scan a QR code", (btn) => void scanInvite(btn, error), "qr"));
++  if (window.odm.scanInvite) form.append(ghostButton(shellText("Scan a QR code"), (btn) => void scanInvite(btn, error), "qr"));
+   form.addEventListener("submit", (event) => {
+     event.preventDefault();
+     void submitJoin(() => openTyped(field.value), join, error, () => {
+@@ -948,7 +949,7 @@ export function renderHome(): void {
+   if (banner) first.append(banner);
+
+   const stage = el("section", "tt-stage");
+-  stage.setAttribute("aria-label", "Title screen");
++  stage.setAttribute("aria-label", shellText("Title screen"));
+   const left = el("div", "tt-stage-left");
+   left.append(titleBlock(pick, feed), menu(primary, feed, join.focus), statusLine());
+   const right = el("div", "tt-stage-right");
+diff --git a/src/renderer/local-ai.ts b/src/renderer/local-ai.ts
+index cd1a903..01760ab 100644
+--- a/src/renderer/local-ai.ts
++++ b/src/renderer/local-ai.ts
+@@ -2,6 +2,7 @@
+ // (no AI, OpenAI by key, an agent program, or a local model on this
+ // machine), the guided local install with its progress, the optional image
+ // stack, the OpenAI key form, and an agent's offer to paint too.
++import { shellText, shellUsesChinese } from "./shell-language.js";
+ import { backLink, formCard, intro, loadingScreen, show } from "./chrome.js";
+ import { button, chip, el, icon, input } from "./dom.js";
+ import type { IconName } from "./dom.js";
+@@ -51,7 +52,7 @@ function currentCard(summary: SavedAi["summary"] | null): HTMLElement | null {
+   const head = el("div", "head");
+   head.append(chip("sparkles"));
+   const grow = el("div", "grow");
+-  grow.append(el("div", "name", "Your world plays with"));
++  grow.append(el("div", "name", shellText("Your world plays with")));
+   for (const line of [summary.story, summary.pictures, summary.narration]) grow.append(el("div", "detail", line));
+   head.append(grow);
+   card.append(head);
+@@ -110,13 +111,13 @@ export function renderLocalAi(fromHome = false, aiStatus: LocalAiStatus | null =
+   }
+   const choices = el("div", "choices");
+   choices.append(
+-    choice("user", "No AI", "A person runs every table, and the app keeps the sheets, dice and maps.", () =>
++    choice("user", shellText("No AI"), shellText("A person runs every table, and the app keeps the sheets, dice and maps."), () =>
+       void finishAi({ choice: "human", apiKey: "", model: "", utilityModel: "" }),
+     ),
+     choice(
+       "key",
+-      "Your OpenAI API key",
+-      "One key tells the story, paints the pictures and can read it aloud, billed to it. No GPU needed.",
++      shellText("Your OpenAI API key"),
++      shellText("One key tells the story, paints the pictures and can read it aloud, billed to it. No GPU needed."),
+       () => renderOpenAiForm(),
+     ),
+   );
+@@ -126,14 +127,14 @@ export function renderLocalAi(fromHome = false, aiStatus: LocalAiStatus | null =
+     choices.append(
+       choice(
+         "wand",
+-        "An agent you already have",
+-        "Claude Code, Codex, opencode, Grok Build, Pi or the Antigravity CLI tells the story on its own sign-in, with none of its own tools.",
++        shellText("An agent you already have"),
++        shellText("Claude Code, Codex, opencode, Grok Build, Pi or the Antigravity CLI tells the story on its own sign-in, with none of its own tools."),
+         () => renderHarnessPicker(finishAi, () => renderLocalAi()),
+       ),
+     );
+     const local = choice(
+       "cpu",
+-      "Local AI on this machine",
++      shellText("Local AI on this machine"),
+       `Free and private: a guided install sized to your hardware. Needs at least ${LOCAL_AI_MINIMUM_GB} GB of graphics memory.`,
+       () => void startLocalAiFlow(),
+     );
+@@ -142,10 +143,12 @@ export function renderLocalAi(fromHome = false, aiStatus: LocalAiStatus | null =
+   }
+   show(
+     "mid",
+-    fromHome ? backLink("Home", () => renderHome()) : null,
++    fromHome ? backLink(shellText("Home"), () => renderHome()) : null,
+     intro(
+-      "Story AI for this device's world",
+-      `The AI services every campaign in the world on this ${isAndroid ? "device" : "computer"} can use. Who runs a particular table (the AI, you, or a friend) is chosen when that campaign is made. Change this any time from Story AI on the home screen.`,
++      shellText("Story AI for this device's world"),
++      shellUsesChinese()
++        ? "配置本地世界可用的 AI 服务。每个战役的主持方式在创建时选择，可随时回到主页调整这些服务。"
++        : `The AI services every campaign in the world on this ${isAndroid ? "device" : "computer"} can use. Who runs a particular table (the AI, you, or a friend) is chosen when that campaign is made. Change this any time from Story AI on the home screen.`,
+     ),
+     currentCard(currentSummary),
+     localAiStatusCard(aiStatus),
+@@ -167,7 +170,7 @@ function speechCard(): HTMLElement | null {
+   head.append(chip("mic"));
+   const grow = el("div", "grow");
+   const detail = el("div", "detail", "Checking this world's speech-to-text...");
+-  grow.append(el("div", "name", "Speech to text"), detail);
++  grow.append(el("div", "name", shellText("Speech to text")), detail);
+   head.append(grow);
+   const actions = el("div", "actions");
+   const bar = el("div", "progress");
+@@ -186,7 +189,7 @@ function speechCard(): HTMLElement | null {
+     actions.replaceChildren();
+     if (!installing && speech.active !== "builtin" && speech.active !== "whisper") {
+       actions.append(
+-        button("secondary", speech.status === "error" ? "Try again" : "Install speech to text", (btn) => {
++        button("secondary", speech.status === "error" ? shellText("Try again") : "Install speech to text", (btn) => {
+           btn.disabled = true;
+           void odm.localSpeechInstall?.().then(apply);
+         }, "download"),
+@@ -248,7 +251,7 @@ function localAiStatusCard(status: LocalAiStatus | null): HTMLElement | null {
+     actions.append(
+       button("secondary", "Start the story AI", (btn) => {
+         btn.disabled = true;
+-        btn.textContent = "Starting...";
++        btn.textContent = shellText("Starting...");
+         void window.odm.localAiStart().then((result) => {
+           if (result.ok) renderLocalAi(true, result.status);
+           else renderError(result.error);
+@@ -341,7 +344,7 @@ function renderLocalAiTiers(hardware: HardwareInfo, tiers: LocalAiTier[]): void
+   needsLine.append(needs);
+   show(
+     "mid",
+-    backLink("Story AI", () => renderLocalAi()),
++    backLink(shellText("Story AI"), () => renderLocalAi()),
+     intro(
+       "Pick your storyteller",
+       tiers.some((tier) => tier.fits)
+@@ -399,7 +402,7 @@ function progressCard(label: HTMLElement): { card: HTMLElement; fill: HTMLElemen
+
+ function renderLocalAiInstall(tier: LocalAiTier): void {
+   state.screenName = "local-ai-install";
+-  const label = el("p", "hint", "Starting...");
++  const label = el("p", "hint", shellText("Starting..."));
+   const { card, fill } = progressCard(label);
+   aiProgress.current = { fill, label };
+   show(
+@@ -415,7 +418,7 @@ function renderLocalAiInstall(tier: LocalAiTier): void {
+     if (!result.ok) {
+       show(
+         "narrow",
+-        backLink("Story AI", () => void startLocalAiFlow()),
++        backLink(shellText("Story AI"), () => void startLocalAiFlow()),
+         intro(`Setting up ${tier.label.toLowerCase()}`, ""),
+         formCard(el("p", "error", result.error)),
+       );
+@@ -450,7 +453,7 @@ async function enterLocalWorld(): Promise<void> {
+ function renderWarning(warning: string): void {
+   state.screenName = "local-ai-warning";
+   const card = formCard(el("p", "error", warning));
+-  const cont = button("primary", "Continue", () => void enterLocalWorld(), "play");
++  const cont = button("primary", shellText("Continue"), () => void enterLocalWorld(), "play");
+   cont.classList.add("block");
+   card.append(cont);
+   show("narrow", intro("Installed, with one loose end", ""), card);
+@@ -466,7 +469,7 @@ function renderComfyOffer(warning: string): void {
+       "One big download now; scene images in your campaigns from then on.",
+       () => renderComfyInstall(),
+     ),
+-    choice("play", "Skip for now", "Play with the story model only. You can add images later.", () =>
++    choice("play", shellText("Skip for now"), "Play with the story model only. You can add images later.", () =>
+       void enterLocalWorld(),
+     ),
+   );
+@@ -483,7 +486,7 @@ function renderComfyOffer(warning: string): void {
+
+ function renderComfyInstall(): void {
+   state.screenName = "local-ai-comfy-install";
+-  const label = el("p", "hint", "Starting...");
++  const label = el("p", "hint", shellText("Starting..."));
+   const { card, fill } = progressCard(label);
+   aiProgress.current = { fill, label };
+   show(
+@@ -499,7 +502,7 @@ function renderComfyInstall(): void {
+     if (!result.ok) {
+       show(
+         "narrow",
+-        backLink("Back", () => renderComfyOffer("")),
++        backLink(shellText("Back"), () => renderComfyOffer("")),
+         intro("Setting up image generation", ""),
+         formCard(el("p", "error", result.error)),
+       );
+@@ -536,7 +539,7 @@ function renderOpenAiForm(saved: SavedAi | null = null): void {
+   keyField.placeholder = keySaved ? "Saved on this device. Blank keeps it." : "sk-...";
+   // No model is named by the app: both fields offer what the key lists, the
+   // storyteller's filled with the catalog's pick once the list arrives.
+-  const [modelLabel, modelField] = input("Game Master model", "text", saved?.model || "");
++  const [modelLabel, modelField] = input(shellText("Game Master model"), "text", saved?.model || "");
+   modelField.placeholder = "One of the models your key lists";
+   const [utilityLabel, utilityField] = input("Utility model (cheaper, for summaries)", "text", saved?.utilityModel || "");
+   utilityField.placeholder = "Blank uses the Game Master model";
+@@ -598,7 +601,7 @@ function renderOpenAiForm(saved: SavedAi | null = null): void {
+   });
+   if (keySaved) listModels("");
+   const error = el("p", "error");
+-  const submit = button("primary", "Save and play");
++  const submit = button("primary", shellText("Save and play"));
+   submit.type = "submit";
+   submit.classList.add("block");
+   const scope = el(
+@@ -624,7 +627,7 @@ function renderOpenAiForm(saved: SavedAi | null = null): void {
+   form.addEventListener("submit", (event) => {
+     event.preventDefault();
+     if (!modelField.value.trim()) {
+-      error.textContent = "Choose the Game Master model from the ones your key lists.";
++      error.textContent = shellText("Choose the Game Master model from the ones your key lists.");
+       modelField.focus();
+       return;
+     }
+@@ -645,10 +648,10 @@ function renderOpenAiForm(saved: SavedAi | null = null): void {
+   });
+   show(
+     "narrow",
+-    backLink("Story AI", () => renderLocalAi()),
++    backLink(shellText("Story AI"), () => renderLocalAi()),
+     intro(
+-      "Connect your OpenAI API key",
+-      "The key is stored by your local server and never shared with players.",
++      shellText("Connect your OpenAI API key"),
++      shellText("The key is stored by your local server and never shared with players."),
+     ),
+     formCard(form),
+   );
+@@ -701,7 +704,7 @@ export function renderAgentPictures(agent: string): void {
+     paint.querySelector(".title")?.append(el("span", "tag", "suggested"));
+     choices.append(
+       paint,
+-      choice("play", "Not now", "Tables use painted placeholders. You can switch this on later in Admin > Image generation.", () => void enterLocalWorld()),
++      choice("play", shellText("Not now"), "Tables use painted placeholders. You can switch this on later in Admin > Image generation.", () => void enterLocalWorld()),
+     );
+     show(
+       "mid",
+@@ -718,8 +721,8 @@ export function renderAgentPictures(agent: string): void {
+     if (!result.ok) {
+       const retry = formCard(
+         el("p", "error", result.error),
+-        button("primary", "Try again", () => void paintTest(), "refresh"),
+-        button("quiet", "Not now", () => void enterLocalWorld()),
++        button("primary", shellText("Try again"), () => void paintTest(), "refresh"),
++        button("quiet", shellText("Not now"), () => void enterLocalWorld()),
+       );
+       show("narrow", intro("The test map did not come back", "Nothing was switched on. Tables keep their placeholders."), retry);
+       return;
+@@ -727,7 +730,7 @@ export function renderAgentPictures(agent: string): void {
+     const img = el("img", "agent-test-picture");
+     img.src = result.image;
+     img.alt = "The test map";
+-    const cont = button("primary", "Continue", () => void enterLocalWorld(), "play");
++    const cont = button("primary", shellText("Continue"), () => void enterLocalWorld(), "play");
+     cont.classList.add("block");
+     show(
+       "narrow",
+@@ -740,7 +743,7 @@ export function renderAgentPictures(agent: string): void {
+ function renderAiNotice(notice: string): void {
+   state.screenName = "local-ai-notice";
+   const card = formCard(el("p", "sub", notice));
+-  const cont = button("primary", "Continue", () => void enterLocalWorld(), "play");
++  const cont = button("primary", shellText("Continue"), () => void enterLocalWorld(), "play");
+   cont.classList.add("block");
+   card.append(cont);
+   show("narrow", intro("Your key is saved", ""), card);
+diff --git a/src/renderer/local.ts b/src/renderer/local.ts
+index 2f2474a..2a38d78 100644
+--- a/src/renderer/local.ts
++++ b/src/renderer/local.ts
+@@ -1,6 +1,7 @@
+ // The device world: entering it (which starts it), the first-run name and
+ // the account screens, and the share row that shows the world's public
+ // address and the switch for it.
++import { shellText, shellUsesChinese } from "./shell-language.js";
+ import { hostCodeFromOrigin } from "../shared/deep-link.js";
+ import { encodeQr, qrSvg } from "../shared/qr.js";
+ import { backLink, formCard, intro, show } from "./chrome.js";
+@@ -73,7 +74,7 @@ function qrPanel(url: string): HTMLElement {
+     el(
+       "p",
+       "hint center",
+-      "Scan with the Open Game Master app to add this world, or with a phone camera to open it in a browser.",
++      shellText("Scan with the Open Game Master app to add this world, or with a phone camera to open it in a browser."),
+     ),
+   );
+   return panel;
+@@ -88,7 +89,7 @@ export function shareRow(): HTMLElement {
+   const row = el("div", "hero-actions stacked share-row");
+   const tunnel = state.tunnel;
+   if (tunnel.state === "running") {
+-    row.append(badge("Shared online", true));
++    row.append(badge(shellText("Shared online"), true));
+     // The invite friends actually need leads: a campaign's room code, from
+     // its lobby (Invite there has the link and the QR too). While shared,
+     // every code this world's campaigns have points here. The address and
+@@ -108,16 +109,16 @@ export function shareRow(): HTMLElement {
+         code ? `Without a code: ${tunnel.url}, or host code ${code}.` : `Without a code: ${tunnel.url}`,
+       ),
+     );
+-    const copy = button("secondary", "Copy link", () => {
++    const copy = button("secondary", shellText("Copy link"), () => {
+       void copyText(tunnel.url).then((worked) => {
+-        copy.lastChild!.textContent = worked ? "Copied" : "Copy failed";
+-        setTimeout(() => (copy.lastChild!.textContent = "Copy link"), 1500);
++        copy.lastChild!.textContent = worked ? shellText("Copied") : shellText("Copy failed");
++        setTimeout(() => (copy.lastChild!.textContent = shellText("Copy link")), 1500);
+       });
+     }, "copy");
+     row.append(copy);
+     if (window.odm.shareLink) {
+       row.append(
+-        button("secondary", "Share", () => {
++        button("secondary", shellText("Share"), () => {
+           void window.odm.shareLink?.({
+             title: "Join my world on Open Game Master",
+             text: `Join my world on Open Game Master: ${tunnel.url}`,
+@@ -127,12 +128,12 @@ export function shareRow(): HTMLElement {
+       );
+     }
+     row.append(
+-      button("secondary", state.shareQrOpen ? "Hide QR" : "QR code", () => {
++      button("secondary", state.shareQrOpen ? shellText("Hide QR") : shellText("QR code"), () => {
+         state.shareQrOpen = !state.shareQrOpen;
+         rerenderShareScreen();
+       }, "qr"),
+     );
+-    const stop = button("quiet", "Stop sharing", (btn) => {
++    const stop = button("quiet", shellText("Stop sharing"), (btn) => {
+       btn.disabled = true;
+       state.shareQrOpen = false;
+       void window.odm.shareStop();
+@@ -142,38 +143,38 @@ export function shareRow(): HTMLElement {
+     return row;
+   }
+   if (tunnel.state === "starting") {
+-    row.append(spinner(), el("span", "status-line", "Opening a public address..."));
++    row.append(spinner(), el("span", "status-line", shellText("Opening a public address...")));
+     return row;
+   }
+   const lan = state.local.lanOrigin;
+   if (lan) {
+     // Sharing on this Wi-Fi: the address friends at the table type or scan.
+     // Online sharing can still be opened on top of it.
+-    row.append(badge("Shared on this Wi-Fi", true));
++    row.append(badge(shellText("Shared on this Wi-Fi"), true));
+     row.append(
+       el(
+         "span",
+         "status-line",
+-        "Friends on the same network join with a campaign's room code, or open this address in a browser or the app. No internet needed; it stays open until you stop sharing or quit.",
++        shellText("Friends on the same network join with a campaign's room code, or open this address in a browser or the app. No internet needed; it stays open until you stop sharing or quit."),
+       ),
+     );
+     row.append(el("span", "status-line quiet", lan));
+-    const copy = button("secondary", "Copy address", () => {
++    const copy = button("secondary", shellText("Copy address"), () => {
+       void copyText(lan).then((worked) => {
+-        copy.lastChild!.textContent = worked ? "Copied" : "Copy failed";
+-        setTimeout(() => (copy.lastChild!.textContent = "Copy address"), 1500);
++        copy.lastChild!.textContent = worked ? shellText("Copied") : shellText("Copy failed");
++        setTimeout(() => (copy.lastChild!.textContent = shellText("Copy address")), 1500);
+       });
+     }, "copy");
+     row.append(copy);
+     row.append(
+-      button("secondary", state.shareQrOpen ? "Hide QR" : "QR code", () => {
++      button("secondary", state.shareQrOpen ? shellText("Hide QR") : shellText("QR code"), () => {
+         state.shareQrOpen = !state.shareQrOpen;
+         rerenderShareScreen();
+       }, "qr"),
+     );
+     row.append(shareOnlineButton(tunnel));
+     row.append(
+-      button("quiet", "Stop Wi-Fi sharing", (btn) => {
++      button("quiet", shellText("Stop Wi-Fi sharing"), (btn) => {
+         btn.disabled = true;
+         state.shareQrOpen = false;
+         void window.odm.lanStop().then(async () => {
+@@ -187,12 +188,14 @@ export function shareRow(): HTMLElement {
+   }
+   const idle = lan
+     ? `On your Wi-Fi at ${lan}. Share online and friends anywhere can join with a campaign's room code.`
+-    : `Share on this Wi-Fi for a table in the same room, no internet needed. Share online${isAndroid ? " while the app runs" : ""} and friends anywhere can join with a campaign's room code.`;
++    : shellUsesChinese()
++      ? "同一网络内的朋友可用 Wi-Fi 分享加入。在线分享后，外网玩家也能使用房间码加入。"
++      : `Share on this Wi-Fi for a table in the same room, no internet needed. Share online${isAndroid ? " while the app runs" : ""} and friends anywhere can join with a campaign's room code.`;
+   const line = el("span", "status-line", state.lanError || (tunnel.state === "error" ? tunnel.error : idle));
+   row.append(line);
+   if (state.local.state !== "unavailable") {
+     row.append(
+-      button("secondary", state.lanError ? "Try Wi-Fi again" : "Share on this Wi-Fi", (btn) => {
++      button("secondary", state.lanError ? shellText("Try Wi-Fi again") : shellText("Share on this Wi-Fi"), (btn) => {
+         btn.disabled = true;
+         state.lanError = "";
+         void window.odm.lanStart().then(async (result) => {
+@@ -210,7 +213,7 @@ export function shareRow(): HTMLElement {
+ function shareOnlineButton(tunnel: TunnelStatus): HTMLButtonElement {
+   return button(
+     "secondary",
+-    tunnel.state === "error" ? "Try sharing again" : "Share online",
++    tunnel.state === "error" ? shellText("Try sharing again") : shellText("Share online"),
+     (btn) => {
+       btn.disabled = true;
+       void window.odm.shareStart().then(async (result) => {
+@@ -226,12 +229,12 @@ function shareOnlineButton(tunnel: TunnelStatus): HTMLButtonElement {
+ export function renderLocalAccount(mode: "create" | "login"): void {
+   state.screenName = "local-account";
+   const form = el("form");
+-  const [userLabel, userField] = input("Username", "text", mode === "login" ? state.local.username : "");
++  const [userLabel, userField] = input(shellText("Username"), "text", mode === "login" ? state.local.username : "");
+   userField.autocomplete = "username";
+-  const [passLabel, passField] = input("Password", "password");
++  const [passLabel, passField] = input(shellText("Password"), "password");
+   passField.autocomplete = mode === "login" ? "current-password" : "new-password";
+   const error = el("p", "error");
+-  const submit = button("primary", mode === "create" ? "Create" : "Sign in");
++  const submit = button("primary", mode === "create" ? shellText("Create") : shellText("Sign in"));
+   submit.type = "submit";
+   submit.classList.add("block");
+   form.append(userLabel, passLabel, error, submit);
+@@ -260,12 +263,12 @@ export function renderLocalAccount(mode: "create" | "login"): void {
+   });
+   show(
+     "narrow",
+-    backLink("Home", () => renderHome()),
++    backLink(shellText("Home"), () => renderHome()),
+     intro(
+-      mode === "create" ? "Create your account" : "Sign in to your world",
++      mode === "create" ? shellText("Create your account") : shellText("Sign in to your world"),
+       mode === "create"
+-        ? "This account lives only on this computer and becomes the world's owner."
+-        : "Use the account you created for offline play.",
++        ? shellText("This account lives only on this computer and becomes the world's owner.")
++        : shellText("Use the account you created for offline play."),
+     ),
+     formCard(form),
+   );
+@@ -277,12 +280,12 @@ export function renderLocalAccount(mode: "create" | "login"): void {
+ export function renderLocalName(): void {
+   state.screenName = "local-name";
+   const form = el("form");
+-  const [nameLabel, nameField] = input("Your name", "text");
++  const [nameLabel, nameField] = input(shellText("Your name"), "text");
+   nameField.placeholder = "How the table will know you";
+   nameField.autocomplete = "username";
+   nameField.maxLength = 24;
+   const error = el("p", "error");
+-  const submit = button("primary", "Start playing", undefined, "play");
++  const submit = button("primary", shellText("Start playing"), undefined, "play");
+   submit.type = "submit";
+   submit.classList.add("block");
+   form.append(nameLabel, error, submit);
+@@ -304,12 +307,12 @@ export function renderLocalName(): void {
+   });
+   show(
+     "narrow",
+-    backLink("Home", () => void refresh().then(() => renderHome())),
++    backLink(shellText("Home"), () => void refresh().then(() => renderHome())),
+     intro(
+-      "Name your adventurer",
++      shellText("Name your adventurer"),
+       "Your world lives on this device. Pick the name friends will see at the table; letters, digits, _ and - only.",
+     ),
+-    formCard(form, el("p", "hint center", "You can add a password later in the game's settings.")),
++    formCard(form, el("p", "hint center", shellText("You can add a password later in the game's settings."))),
+   );
+   nameField.focus();
+ }
+diff --git a/src/renderer/servers.ts b/src/renderer/servers.ts
+index 78cca7c..d2231ac 100644
+--- a/src/renderer/servers.ts
++++ b/src/renderer/servers.ts
+@@ -2,6 +2,7 @@
+ // forgetting, plus the error screen every flow falls back to. The
+ // behaviour here is unchanged from the single-file shell; only the frame
+ // around it moved.
++import { shellText } from "./shell-language.js";
+ import { CODE_SHAPE, insecureRemoteOrigin, parseRoomCode } from "../shared/deep-link.js";
+ import { joinFormShape } from "../shared/join-form.js";
+ import { landingPath } from "../shared/open-path.js";
+@@ -17,7 +18,7 @@ import type { ServerProbe, ServerSummary } from "../shared/types";
+ export function renderError(message: string): void {
+   state.screenName = "error";
+   const card = formCard(el("h2", "", "Something went wrong"), el("p", "sub", message));
+-  card.append(button("secondary", "Back", () => void refresh().then(() => renderHome()), "arrowLeft"));
++  card.append(button("secondary", shellText("Back"), () => void refresh().then(() => renderHome()), "arrowLeft"));
+   show("narrow", intro("A snag on the road", ""), card);
+ }
+
+@@ -90,15 +91,15 @@ export function renderDeleteAccount(server: ServerSummary): void {
+           ),
+         );
+         card.append(
+-          button("secondary", "Forget this server", () => void forgetServer(server), "close"),
+-          button("primary", "Home", () => renderHome(), "arrowLeft"),
++          button("secondary", shellText("Forget this server"), () => void forgetServer(server), "close"),
++          button("primary", shellText("Home"), () => renderHome(), "arrowLeft"),
+         );
+         show("narrow", intro(name, hostOfOrigin(server.origin)), card);
+       });
+   });
+   show(
+     "narrow",
+-    backLink("Home", () => renderHome()),
++    backLink(shellText("Home"), () => renderHome()),
+     intro("Delete account", `${server.username} on ${name}`),
+     formCard(form),
+   );
+@@ -237,7 +238,7 @@ export function renderAdd(prefill: string): void {
+   originField.placeholder = "ABCD2345 or play.example.com";
+   originField.inputMode = "url";
+   const error = el("p", "error");
+-  const submit = button("primary", "Continue");
++  const submit = button("primary", shellText("Continue"));
+   submit.type = "submit";
+   submit.classList.add("block");
+   form.append(originLabel, error, submit);
+@@ -255,14 +256,14 @@ export function renderAdd(prefill: string): void {
+   // address as a code, and an invite QR carries a room code as well. Both
+   // land in the same flow as a paste.
+   if (window.odm.scanInvite) {
+-    const scan = button("secondary", "Scan a QR code", (btn) => void scanInvite(btn, error), "qr");
++    const scan = button("secondary", shellText("Scan a QR code"), (btn) => void scanInvite(btn, error), "qr");
+     scan.classList.add("block");
+     card.append(scan);
+   }
+   show(
+     "narrow",
+-    backLink("Home", () => renderHome()),
+-    intro("Add a server", "Where does your party gather?"),
++    backLink(shellText("Home"), () => renderHome()),
++    intro(shellText("Add a server"), shellText("Where does your party gather?")),
+     joinBanner(),
+     card,
+   );
+@@ -278,9 +279,9 @@ function authTabs(
+     return null;
+   }
+   const tabs = el("div", "tabs");
+-  const loginTab = el("button", active === "login" ? "active" : "", "Sign in");
++  const loginTab = el("button", active === "login" ? "active" : "", shellText("Sign in"));
+   loginTab.type = "button";
+-  const registerTab = el("button", active === "register" ? "active" : "", "Create account");
++  const registerTab = el("button", active === "register" ? "active" : "", shellText("Create account"));
+   registerTab.type = "button";
+   loginTab.addEventListener("click", () => renderAuth(probe, "login", username));
+   registerTab.addEventListener("click", () => renderAuth(probe, "register", username));
+@@ -321,12 +322,12 @@ export function renderAuth(
+   });
+   const byRoomCode = mode === "register" && !shape.password;
+   const [userLabel, userField] = input(
+-    byRoomCode ? "Your name at this table" : "Username",
++    byRoomCode ? shellText("Your name at this table") : shellText("Username"),
+     "text",
+     reseat ? "" : presetUsername,
+   );
+   userField.autocomplete = "username";
+-  const [passLabel, passField] = input("Password", "password");
++  const [passLabel, passField] = input(shellText("Password"), "password");
+   passField.autocomplete = mode === "login" ? "current-password" : "new-password";
+   // Said before anything is typed: a public server on plain http.
+   if (insecureRemoteOrigin(probe.origin)) {
+@@ -434,7 +435,7 @@ export function renderAuth(
+   if (probe.discord && !claiming) {
+     const discord = button(
+       "secondary",
+-      "Sign in with Discord",
++      shellText("Sign in with Discord"),
+       (btn) => {
+         btn.disabled = true;
+         error.textContent = "";
+@@ -453,12 +454,12 @@ export function renderAuth(
+   }
+   const notes: HTMLElement[] = [];
+   if (probe.signupMode === "closed" && mode === "login") {
+-    notes.push(el("p", "hint center", "This server is not accepting new accounts."));
++    notes.push(el("p", "hint center", shellText("This server is not accepting new accounts.")));
+   }
+   const subtitle = `${probe.origin}${probe.version ? `, server ${probe.version}` : ""}`;
+   show(
+     "narrow",
+-    backLink("Back", () => renderAdd(probe.origin)),
++    backLink(shellText("Back"), () => renderAdd(probe.origin)),
+     intro(name, subtitle),
+     joinBanner(),
+     formCard(...leading, claiming ? null : authTabs(probe, mode, presetUsername), form, ...notes),
+diff --git a/src/renderer/settings.ts b/src/renderer/settings.ts
+index 03090c6..5802534 100644
+--- a/src/renderer/settings.ts
++++ b/src/renderer/settings.ts
+@@ -3,6 +3,7 @@
+ // and QR), the home screen's hide-offline toggle, help and the tour, and
+ // the legal links. Servers keep their own account settings; this screen
+ // says so and points there.
++import { shellText } from "./shell-language.js";
+ import {
+   applyDeckLayout,
+   backLink,
+@@ -15,7 +16,7 @@ import {
+ } from "./chrome.js";
+ import { button, chip, copyText, el, icon, input, spinner } from "./dom.js";
+ import type { IconName } from "./dom.js";
+-import { isGameShowing, mountAppearance, mountDeviceSettings } from "./game-screen.js";
++import { isGameShowing, mountAppearance, mountDeviceSettings, mountLanguage } from "./game-screen.js";
+ import { offlineToggle, renderHome } from "./home.js";
+ import { GUIDE_URL, renderHelp } from "./help.js";
+ import { openLocal, shareRow } from "./local.js";
+@@ -57,8 +58,8 @@ export function row(label: string, control: HTMLElement): HTMLElement {
+ function appearanceSection(): HTMLElement {
+   const { card, body } = section(
+     "sparkles",
+-    "Appearance",
+-    "The look of the whole app on this device: its colours, materials and painted borders, by day or by night.",
++    shellText("Appearance"),
++    shellText("The look of the whole app on this device: its colours, materials and painted borders, by day or by night."),
+   );
+   const host = el("div", "game-root device-settings");
+   host.append(spinner());
+@@ -75,18 +76,38 @@ function appearanceSection(): HTMLElement {
+       else unmount = release;
+     })
+     .catch(() => {
+-      host.replaceChildren(el("p", "hint", "The theme choices did not load."));
++      host.replaceChildren(el("p", "hint", shellText("The theme choices did not load.")));
+     });
+   return card;
+ }
+
++function languageSection(): HTMLElement {
++  const host = el("div", "game-root device-settings");
++  host.append(spinner());
++  let gone = false;
++  let unmount: (() => void) | null = null;
++  onLeaveScreen(() => {
++    gone = true;
++    unmount?.();
++  });
++  void mountLanguage(host)
++    .then((release) => {
++      if (gone) release();
++      else unmount = release;
++    })
++    .catch(() => {
++      host.replaceChildren(el("p", "hint", shellText("The language choices did not load.")));
++    });
++  return host;
++}
++
+ // Microphone, playback, levels and dice: the server's own DeviceSettings
+ // panel, drawn by the game bundle into this card. Its controls write the
+ // stores the table reads, so a call or table in progress follows along.
+ function audioSection(): HTMLElement {
+   const { card, body } = section(
+     "sliders",
+-    "Audio and dice",
++    shellText("Audio and dice"),
+     "The microphone and output this device uses, the key that holds the table's mic, how loud each part of the table is, and the dice on it. Changes reach a call or a table already in progress.",
+   );
+   const host = el("div", "game-root device-settings");
+@@ -106,7 +127,7 @@ function audioSection(): HTMLElement {
+       else unmount = release;
+     })
+     .catch(() => {
+-      host.replaceChildren(el("p", "hint", "The audio and dice controls did not load."));
++      host.replaceChildren(el("p", "hint", shellText("The audio and dice controls did not load.")));
+     });
+   return card;
+ }
+@@ -205,14 +226,14 @@ function deviceSection(): HTMLElement | null {
+   body.append(
+     row(
+       "Who tells the story: a human, your OpenAI key" + (isAndroid ? "" : ", or a local model"),
+-      button("secondary", "Story AI", () => renderLocalAi(true), "sparkles"),
++      button("secondary", shellText("Story AI"), () => renderLocalAi(true), "sparkles"),
+     ),
+   );
+   // Opening the page wakes the world when it sleeps.
+-  const account = button("secondary", "Open", () => void openLocal("/settings"), "user");
++  const account = button("secondary", shellText("Open"), () => void openLocal("/settings"), "user");
+   body.append(row("Your account in this world: name and avatar", account));
+   const share = el("div", "settings-share");
+-  share.append(el("span", "settings-label", isAndroid ? "Share online" : "Sharing"));
++  share.append(el("span", "settings-label", isAndroid ? shellText("Share online") : "Sharing"));
+   share.append(
+     local.state === "running"
+       ? shareRow()
+@@ -615,7 +636,7 @@ function troubleshootingSection(): HTMLElement | null {
+     add("Check the server files this app unpacked against the ones it shipped with", button("secondary", "Check files", () => void checkFiles(), "check"));
+   }
+   if (bridge.localRepair) {
+-    repairButton = button("secondary", "Repair", () => void repairFiles(), "refresh");
++    repairButton = button("secondary", shellText("Repair"), () => void repairFiles(), "refresh");
+     add(
+       "Unpack the server files again, keeping everything you made. Your world restarts if it is awake",
+       repairButton,
+@@ -678,15 +699,15 @@ function troubleshootingSection(): HTMLElement | null {
+ }
+
+ function homeSection(): HTMLElement {
+-  const { card, body } = section("scroll", "Title screen", "");
++  const { card, body } = section("scroll", shellText("Title screen"), "");
+   body.append(row("Hide the save slots of hosts that are offline", offlineToggle(() => renderSettings())));
+   return card;
+ }
+
+ function helpSection(): HTMLElement {
+-  const { card, body } = section("help", "Help", "");
++  const { card, body } = section("help", shellText("Help"), "");
+   body.append(
+-    row("Where everything lives and how to get around", button("secondary", "User guide", () => renderHelp(), "book")),
++    row("Where everything lives and how to get around", button("secondary", shellText("User guide"), () => renderHelp(), "book")),
+     row(
+       "Walk through the title screen again",
+       button("secondary", "Replay tour", () => void refresh().then(() => {
+@@ -702,7 +723,7 @@ function serversNote(): HTMLElement | null {
+   if (state.servers.length === 0) return null;
+   const { card, body } = section(
+     "server",
+-    "Servers",
++    shellText("Servers"),
+     "Each server keeps your account, avatar and password on its own Settings page: open the server and use the account menu there. Forgetting a server or deleting your account on it is in the menu beside the server's name.",
+   );
+   body.remove();
+@@ -713,8 +734,8 @@ function legalSection(): HTMLElement {
+   const { card, body } = section("link", "Links", "");
+   for (const [label, href] of [
+     ["User guide online", GUIDE_URL],
+-    ["Privacy policy", "https://opengamemaster.com/privacy/"],
+-    ["Terms of service", "https://opengamemaster.com/terms/"],
++    [shellText("Privacy policy"), "https://opengamemaster.com/privacy/"],
++    [shellText("Terms of service"), "https://opengamemaster.com/terms/"],
+   ] as const) {
+     const link = el("a", "settings-link", label);
+     link.href = href;
+@@ -743,32 +764,32 @@ export function renderSettings(): void {
+     const groups: Array<{ id: string; label: string; detail: string; cards: (HTMLElement | null)[] }> = [
+       {
+         id: "settings-device",
+-        label: "Playing on this device",
+-        detail: "Only on this device: the look, sound, microphone, dice, controllers and the title screen.",
+-        cards: [appearanceSection(), audioSection(), deckSection(), homeSection()],
++        label: shellText("Playing on this device"),
++        detail: shellText("Only on this device: the look, sound, microphone, dice, controllers and the title screen."),
++        cards: [languageSection(), appearanceSection(), audioSection(), deckSection(), homeSection()],
+       },
+       {
+         id: "settings-world",
+         label: `Your world on this ${isAndroid ? "device" : "computer"}`,
+-        detail: "The world this app hosts: who plays there, its Story AI, its narration and sound, and moving it.",
++        detail: shellText("The world this app hosts: who plays there, its Story AI, its narration and sound, and moving it."),
+         cards: [deviceSection(), worldMediaSection(), transferSection()],
+       },
+       {
+         id: "settings-accounts",
+-        label: "Accounts and connections",
++        label: shellText("Accounts and connections"),
+         detail: "Servers and friends' worlds this app signs in to.",
+         cards: [signInsSection(), worldsSection(), serversNote()],
+       },
+       {
+         id: "settings-help",
+-        label: "Help and maintenance",
+-        detail: "Guides, updates, and repairs if something goes wrong.",
++        label: shellText("Help and maintenance"),
++        detail: shellText("Guides, updates, and repairs if something goes wrong."),
+         cards: [helpSection(), appSection(), troubleshootingSection(), legalSection()],
+       },
+     ];
+     const shown = groups.filter((group) => group.cards.some(Boolean));
+     const contents = el("nav", "settings-contents");
+-    contents.setAttribute("aria-label", "Settings sections");
++    contents.setAttribute("aria-label", shellText("Settings sections"));
+     for (const group of shown) {
+       const jump = el("button", "settings-jump", group.label);
+       jump.type = "button";
+@@ -779,7 +800,7 @@ export function renderSettings(): void {
+       contents.append(jump);
+     }
+     return [
+-      intro("Settings", "What this device plays like, the world it hosts, your sign-ins, and help."),
++      intro(shellText("Settings"), shellText("What this device plays like, the world it hosts, your sign-ins, and help.")),
+       contents,
+       ...shown.flatMap((group) => {
+         const head = el("div", "settings-group");
+@@ -792,9 +813,9 @@ export function renderSettings(): void {
+   // Inside a world, Settings opens over the table so the call and the
+   // stream keep running; the way back is to the game, not home.
+   if (isGameShowing()) {
+-    showOverlay("settings", backLink("Back to the game", () => closeOverlay()), ...sections());
++    showOverlay("settings", backLink(shellText("Back to the game"), () => closeOverlay()), ...sections());
+     return;
+   }
+   state.screenName = "settings";
+-  show("mid", backLink("Home", () => renderHome()), ...sections());
++  show("mid", backLink(shellText("Home"), () => renderHome()), ...sections());
+ }
+diff --git a/src/renderer/shell-language.ts b/src/renderer/shell-language.ts
+new file mode 100644
+index 0000000..fa01df6
+--- /dev/null
++++ b/src/renderer/shell-language.ts
+@@ -0,0 +1,187 @@
++// The launcher has its own controls before a campaign is open. Its
++// translations use the same device language preference as the game views.
++const translations: Record<string, string> = {
++  "Add a server": "添加服务器",
++  "Adding a server": "正在添加服务器",
++  "Adventurer": "冒险者",
++  "Agent program": "代理程序",
++  "Agents": "代理程序",
++  "An agent you already have": "使用已安装的代理程序",
++  "Appearance": "外观",
++  "Audio and dice": "音频与骰子",
++  "Accounts and connections": "账号与连接",
++  "Back": "返回",
++  "Back home": "返回主页",
++  "Back to the game": "返回游戏",
++  "Begin your world": "创建你的世界",
++  "Change": "更改",
++  "Characters": "角色",
++  "Check again": "重新检查",
++  "Checking which agent programs this computer has...": "正在检查这台电脑上已安装的代理程序…",
++  "Close settings": "关闭设置",
++  "Close the guide": "关闭指南",
++  "Connect to a server to play": "连接服务器后开始游戏",
++  "Continue": "继续",
++  "Continue your adventure": "继续冒险",
++  "Copied": "已复制",
++  "Copy": "复制",
++  "Copy address": "复制地址",
++  "Copy failed": "复制失败",
++  "Copy link": "复制链接",
++  "Create": "创建",
++  "Create account": "创建账号",
++  "Create your account": "创建你的账号",
++  "Every adventure starts with a table.": "每场冒险都从一张游戏桌开始。",
++  "Every campaign starts with an empty table.": "每场战役都从一张空桌开始。",
++  "Enter": "进入",
++  "Forge a new world": "创建新世界",
++  "Forget this server": "移除此服务器",
++  "Friends on the same network join with a campaign's room code, or open this address in a browser or the app. No internet needed; it stays open until you stop sharing or quit.": "同一网络内的朋友可输入战役房间码，也可用浏览器或客户端打开这个地址。共享持续到你停止共享或退出应用。",
++  "Game Master model": "主持人模型",
++  "Gather your party": "召集队伍",
++  "Help": "帮助",
++  "Help & guide": "帮助与指南",
++  "Help and maintenance": "帮助与维护",
++  "Hide offline": "隐藏离线房间",
++  "Hide QR": "隐藏二维码",
++  "Home": "主页",
++  "Hosted on this device": "由本机托管",
++  "Hosts": "主机",
++  "How the table will know you": "其他玩家看到的名字",
++  "Join": "加入",
++  "Join a friend's campaign with a room code or invite link.": "用房间码或邀请链接加入朋友的战役。",
++  "Join with a code": "输入房间码加入",
++  "Join with a room code": "使用房间码加入",
++  "Language": "语言",
++  "Local AI on this machine": "在本机运行 AI",
++  "Looking for your agents": "正在查找代理程序",
++  "Main menu": "主菜单",
++  "Menu": "菜单",
++  "Name your adventurer": "给你的冒险者取名",
++  "New campaign": "新建战役",
++  "New campaign here": "在这里创建战役",
++  "No AI": "由真人主持",
++  "No device world": "没有本地世界",
++  "No tables yet.": "还没有游戏桌。",
++  "Not available here.": "此处不可用。",
++  "Not now": "稍后",
++  "Not started yet": "尚未开始",
++  "Offline world ready.": "本地世界已就绪。",
++  "On screen only": "仅显示文字",
++  "On this device": "在此设备上",
++  "Open": "打开",
++  "Opening a public address...": "正在创建公网地址…",
++  "Password": "密码",
++  "Paste invite": "粘贴邀请",
++  "Paste invite or code": "粘贴邀请链接或房间码",
++  "Playing on this device": "本机游戏设置",
++  "Privacy policy": "隐私政策",
++  "QR code": "二维码",
++  "Quick start": "快速开始",
++  "Refresh": "刷新",
++  "Repair": "修复",
++  "Room code": "房间码",
++  "Rulebook": "规则手册",
++  "Same as the story model": "与剧情模型相同",
++  "Save and play": "保存并开始",
++  "Scan a QR code": "扫描二维码",
++  "Scan invite": "扫描邀请二维码",
++  "Scan with the Open Game Master app to add this world, or with a phone camera to open it in a browser.": "用 Open Game Master 扫码添加此世界，或用手机相机扫码后在浏览器里打开。",
++  "Servers": "服务器",
++  "Settings": "设置",
++  "Settings sections": "设置栏目",
++  "Share": "分享",
++  "Share on this Wi-Fi": "在当前 Wi-Fi 上分享",
++  "Share online": "在线分享",
++  "Shared on this Wi-Fi": "已在当前 Wi-Fi 上分享",
++  "Shared online": "已在线分享",
++  "Sign in": "登录",
++  "Sign in to your world": "登录你的世界",
++  "Sign in with Discord": "使用 Discord 登录",
++  "Skip for now": "暂时跳过",
++  "Start playing": "开始游戏",
++  "Starting": "正在启动",
++  "Starting...": "正在启动…",
++  "Stop Wi-Fi sharing": "停止 Wi-Fi 分享",
++  "Stop sharing": "停止分享",
++  "Story AI": "剧情 AI",
++  "Story AI for this device's world": "本地世界的剧情 AI",
++  "Story model": "剧情模型",
++  "This computer": "这台电脑",
++  "This device": "此设备",
++  "Terms of service": "服务条款",
++  "The program's own default": "使用该程序的默认模型",
++  "This account lives only on this computer and becomes the world's owner.": "此账号只保存在这台电脑上，并拥有这个世界。",
++  "This server is not accepting new accounts.": "这台服务器暂不接受新账号。",
++  "Title screen": "开始界面",
++  "Try Wi-Fi again": "重试 Wi-Fi 分享",
++  "Try again": "重试",
++  "Try sharing again": "重新分享",
++  "Use an agent you already have": "使用已安装的代理程序",
++  "Use the account you created for offline play.": "使用你为本地游玩创建的账号。",
++  "User guide": "使用指南",
++  "Username": "用户名",
++  "Voices and music": "语音和音乐",
++  "Where does your party gather?": "你的队伍在哪里集合？",
++  "Which language the app uses is a choice on this device.": "界面语言保存在此设备上。",
++  "Workshop": "工坊",
++  "You can add a password later in the game's settings.": "以后可以在游戏设置里添加密码。",
++  "Your OpenAI API key": "使用 OpenAI API 密钥",
++  "Your first tale": "你的第一场冒险",
++  "Your name": "你的名字",
++  "Your name at this table": "你在这张游戏桌上的昵称",
++  "Your table": "你的游戏桌",
++  "Your tables": "你的游戏桌",
++  "Your world is awake.": "你的世界已启动。",
++  "Your world plays with": "你的世界正在使用",
++  "What this device plays like, the world it hosts, your sign-ins, and help.": "调整本机体验、管理本地世界和登录账号，或查看帮助。",
++  "Only on this device: the look, sound, microphone, dice, controllers and the title screen.": "调整本机外观、声音、麦克风、骰子、手柄和开始界面。",
++  "The world this app hosts: who plays there, its Story AI, its narration and sound, and moving it.": "管理本地世界的玩家、剧情 AI、语音和音效，或迁移世界。",
++  "The look of the whole app on this device: its colours, materials and painted borders, by day or by night.": "调整本机界面的颜色、材质、边框和明暗模式。",
++  "The theme choices did not load.": "无法加载主题选项。",
++  "The language choices did not load.": "无法加载语言选项。",
++  "The audio and dice controls did not load.": "无法加载音频与骰子选项。",
++  "A person runs every table, and the app keeps the sheets, dice and maps.": "由真人主持，应用管理角色卡、骰子和地图。",
++  "One key tells the story, paints the pictures and can read it aloud, billed to it. No GPU needed.": "用同一个密钥生成剧情、配图和朗读，费用由该密钥所属账号承担。",
++  "Claude Code, Codex, opencode, Grok Build, Pi or the Antigravity CLI tells the story on its own sign-in, with none of its own tools.": "使用已登录的 Claude Code、Codex、opencode、Grok Build、Pi 或 Antigravity CLI 主持游戏。",
++  "Claude Code, Codex, opencode, Grok Build, Pi or the Antigravity CLI tells the story on its own sign-in. It gets none of its own tools: only the table's rules, turn by turn, the same as the built-in storyteller.": "通过已登录的 Claude Code、Codex、opencode、Grok Build、Pi 或 Antigravity CLI 主持游戏。代理程序使用本桌提供的游戏工具。",
++  "Fast processing": "快速处理",
++  "Speech to text": "语音转文字",
++  "Narration and sound": "朗读和音效",
++  "Reading the story aloud": "朗读剧情",
++  "What reads the story aloud": "剧情朗读服务",
++  "Music and ambience": "音乐和环境音",
++  "Hear a sample": "试听",
++  "Choose the Game Master model from the ones your key lists.": "从密钥支持的模型中选择主持人模型。",
++  "Connect your OpenAI API key": "连接 OpenAI API 密钥",
++  "The key is stored by your local server and never shared with players.": "密钥保存在本地服务器上，仅服务器可访问。",
++  "Utility model": "辅助模型",
++  "Test the table": "测试游戏桌",
++  "Guides, updates, and repairs if something goes wrong.": "查看指南、更新和故障修复工具。",
++};
++
++export function shellUsesChinese(): boolean {
++  const saved = window.localStorage.getItem("odm.locale");
++  if (saved === "zh-CN") return true;
++  if (saved === "en" || saved === "fr") return false;
++  const current = document.documentElement.lang.toLowerCase();
++  if (current === "zh-cn") return true;
++  if (current === "fr" || current.startsWith("fr-")) return false;
++  for (const raw of navigator.languages ?? [navigator.language]) {
++    const tag = raw.toLowerCase();
++    const language = tag.split("-")[0];
++    if (language === "en" || language === "fr") return false;
++    if (language === "zh") {
++      try {
++        if (new Intl.Locale(tag).maximize().script === "Hans") return true;
++      } catch {
++        // Ignore malformed language tags.
++      }
++    }
++  }
++  return false;
++}
++
++export function shellText(english: string): string {
++  return shellUsesChinese() && Object.hasOwn(translations, english) ? translations[english] ?? english : english;
++}
+diff --git a/src/renderer/style.css b/src/renderer/style.css
+index b8d2f71..a447f9e 100644
+--- a/src/renderer/style.css
++++ b/src/renderer/style.css
+@@ -668,3 +668,9 @@ html[data-theme="light"] .screen.title {
+   --theme-night-amber-100: var(--shell-night-amber-100);
+   --theme-night-amber-50: var(--shell-night-amber-50);
+ }
++
++/* The bundled Latin faces do not cover Simplified Chinese. */
++html:lang(zh-CN) {
++  --font-display: "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
++  --font-sans: var(--font-display);
++}
+diff --git a/src/renderer/world-media.ts b/src/renderer/world-media.ts
+index fd9deb9..5eda09e 100644
+--- a/src/renderer/world-media.ts
++++ b/src/renderer/world-media.ts
+@@ -5,6 +5,7 @@
+ // world to ask it. What the card knows lives outside it, like the story
+ // memory note: Settings repaints on every status event of the world, and
+ // waking it sends two.
++import { shellText } from "./shell-language.js";
+ import { intro, onLeaveScreen, show } from "./chrome.js";
+ import { button, chip, copyText, el, input, spinner } from "./dom.js";
+ import type { IconName } from "./dom.js";
+@@ -245,7 +246,7 @@ function kokoroHelp(): HTMLDetailsElement {
+       if (hardware && lines.isConnected) fill(kokoroCommands(hardware));
+     });
+   }
+-  help.append(lines, button("secondary", "Check again", () => askNarration(), "refresh"));
++  help.append(lines, button("secondary", shellText("Check again"), () => askNarration(), "refresh"));
+   return help;
+ }
+
+@@ -253,9 +254,9 @@ function commandLine({ label, command }: KokoroCommand): HTMLElement {
+   const line = el("div", "settings-row");
+   const text = el("span", "grow");
+   text.append(el("span", "settings-label", label), el("code", "media-command", command));
+-  const copy = button("secondary", "Copy", (btn) => {
++  const copy = button("secondary", shellText("Copy"), (btn) => {
+     void copyText(command).then((ok) => {
+-      btn.lastChild!.textContent = ok ? "Copied" : "Copy failed";
++      btn.lastChild!.textContent = ok ? shellText("Copied") : shellText("Copy failed");
+     });
+   }, "copy");
+   line.append(text, copy);
+@@ -291,17 +292,17 @@ export function worldMediaSection(setup = false): HTMLElement | null {
+   if (state.local.state === "unavailable" || (state.local.firstRun && !setup)) return null;
+   const { card, body } = section(
+     "volume",
+-    "Narration and sound",
++    shellText("Narration and sound"),
+     setup ? "" : "What reads the story aloud at your tables, and the music and ambience they play, for every campaign in your world.",
+   );
+
+   // ---- reading aloud ----
+-  const narrationHead = el("span", "settings-label", "Reading the story aloud");
++  const narrationHead = el("span", "settings-label", shellText("Reading the story aloud"));
+   const narrationLine = el("p", "settings-note");
+   narrationLine.setAttribute("aria-live", "polite");
+   const group = el("div", "choices memory-choices");
+   group.setAttribute("role", "radiogroup");
+-  group.setAttribute("aria-label", "What reads the story aloud");
++  group.setAttribute("aria-label", shellText("What reads the story aloud"));
+   const help = isAndroid ? null : kokoroHelp();
+   const elsewhere = kokoroElsewhere();
+   const openai = voiceChoice("key", "OpenAI's voices", () => {
+@@ -324,18 +325,18 @@ export function worldMediaSection(setup = false): HTMLElement | null {
+       open.querySelector("summary")?.focus();
+     }
+   });
+-  const off = voiceChoice("book", "On screen only", () => void choose({ kind: "off" }));
++  const off = voiceChoice("book", shellText("On screen only"), () => void choose({ kind: "off" }));
+   off.desc.textContent = "Nothing is read aloud; the story stays on screen.";
+   group.append(openai.btn, kokoro.btn, off.btn);
+   const sampleRow = row(
+     "Hear how your tables will sound",
+-    button("secondary", "Hear a sample", () => void hearSample(), "play"),
++    button("secondary", shellText("Hear a sample"), () => void hearSample(), "play"),
+   );
+   const status = el("div", "memory-status");
+   status.setAttribute("aria-live", "polite");
+
+   // ---- the sound library ----
+-  const libraryHead = el("span", "settings-label", "Music and ambience");
++  const libraryHead = el("span", "settings-label", shellText("Music and ambience"));
+   const libraryLine = el("p", "settings-note");
+   libraryLine.setAttribute("aria-live", "polite");
+   const bar = el("div", "progress");
+@@ -426,14 +427,14 @@ export function renderMediaSetup(done: () => void): void {
+     done();
+     return;
+   }
+-  const finish = button("primary", "Continue", () => done(), "play");
++  const finish = button("primary", shellText("Continue"), () => done(), "play");
+   finish.classList.add("block");
+   const actions = el("div", "actions media-setup-actions");
+   actions.append(finish);
+   show(
+     "mid",
+     intro(
+-      "Voices and music",
++      shellText("Voices and music"),
+       "How your tables sound: what reads the story aloud, and the rooms, music and sound effects they play. Both are optional, and Settings changes them any time.",
+     ),
+     card,
+diff --git a/tests/shell-language.test.mjs b/tests/shell-language.test.mjs
+new file mode 100644
+index 0000000..fe470ed
+--- /dev/null
++++ b/tests/shell-language.test.mjs
+@@ -0,0 +1,30 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { shellText, shellUsesChinese } from "../src/renderer/shell-language.ts";
++
++test("the desktop shell follows the device language and explicit preferences", () => {
++  let saved = null;
++  const element = { lang: "en-US" };
++  const browser = { languages: ["zh-Hans-CN", "en-US"] };
++  globalThis.window = { localStorage: { getItem: () => saved } };
++  globalThis.document = { documentElement: element };
++  Object.defineProperty(globalThis, "navigator", { value: browser, configurable: true });
++
++  assert.equal(shellText("Share on this Wi-Fi"), "在当前 Wi-Fi 上分享");
++  assert.equal(shellText("A campaign name"), "A campaign name");
++  saved = "en";
++  assert.equal(shellText("Share on this Wi-Fi"), "Share on this Wi-Fi");
++
++  saved = null;
++  element.lang = "fr-FR";
++  assert.equal(shellUsesChinese(), false);
++  saved = "zh-CN";
++  assert.equal(shellText("Settings"), "设置");
++
++  saved = null;
++  element.lang = "en-US";
++  browser.languages = ["zh-Hant", "en-US"];
++  assert.equal(shellUsesChinese(), false);
++  browser.languages = ["zh-Hant", "zh-SG"];
++  assert.equal(shellUsesChinese(), true);
++});

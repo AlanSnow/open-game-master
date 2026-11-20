@@ -76,6 +76,9 @@ export function classDisplayNameFor(id: string, locale: Locale = "en"): string {
   if (named) {
     return named;
   }
+  if (locale === "zh-CN") {
+    return contentName("classes", idAsName(id), locale);
+  }
   if (locale === "fr") {
     const official = contentName("classes", spaced(id), locale);
     if (official !== spaced(id)) {
@@ -96,6 +99,9 @@ export function speciesName(source: { race: string; raceLabel?: string | null })
 // capitalized id the plain reading gives.
 export function speciesNameFor(source: { race: string; raceLabel?: string | null }, locale: Locale = "en"): string {
   const plain = speciesName(source);
+  if (locale === "zh-CN") {
+    return contentName("species", plain, locale);
+  }
   if (locale !== "fr") {
     return plain;
   }
